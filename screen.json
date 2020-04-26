@@ -1,0 +1,26 @@
+{
+    "type": "HorizontalSplit",
+    "data": {},
+    "children": [
+        {
+            "type": "OrientationIndicator",
+            "data": {
+                "pitch": 0.0
+            }
+        },
+        {
+            "type": "VerticalSplit",
+            "data": {},
+            "children": [
+                {
+                    "type": "RotationalIndicator",
+                    "data": { }
+                },
+                {
+                    "type": "RotationalIndicator",
+                    "data": { }
+                }
+            ]
+        }
+    ]
+}
