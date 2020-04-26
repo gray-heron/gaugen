@@ -1,26 +1,98 @@
 {
-    "type": "HorizontalSplit",
-    "data": {},
+    "type": "VerticalSplit",
+    "data": {
+        "spacing": 0.9
+    },
     "children": [
         {
-            "type": "OrientationIndicator",
+            "type": "Spacer",
             "data": {
-                "pitch": 0.0
+                "spacing": 1.0
+            },      
+            "children": [{
+                "type": "RotationalIndicator",
+                "data": {
+                    "precision": 2,
+                    "unit": "V",
+                    "caption": "VOLTAGE",
+                    "value": 8.0,
+                    "value_min": 4.0,
+                    "value_ranges": [
+                        [
+                            6.0,
+                            "Error"
+                        ],
+                        [
+                            6.6,
+                            "Warning"
+                        ],
+                        [
+                            9.8,
+                            "Ok"
+                        ],
+                        [
+                            11.0,
+                            "Error"
+                        ]
+                    ]
+                }
+            }]
+        },
+        {
+            "type": "RotationalIndicator",
+            "data": {
+                "precision": 2,
+                "unit": "V",
+                "caption": "VOLTAGE",
+                "value": 5.0,
+                "value_min": 4.0,
+                "value_ranges": [
+                    [
+                        6.0,
+                        "Error"
+                    ],
+                    [
+                        6.6,
+                        "Warning"
+                    ],
+                    [
+                        8.4,
+                        "Ok"
+                    ],
+                    [
+                        10.0,
+                        "Error"
+                    ]
+                ]
             }
         },
         {
-            "type": "VerticalSplit",
-            "data": {},
-            "children": [
-                {
-                    "type": "RotationalIndicator",
-                    "data": { }
-                },
-                {
-                    "type": "RotationalIndicator",
-                    "data": { }
-                }
-            ]
+            "type": "RotationalIndicator",
+            "data": {
+                "precision": 2,
+                "unit": "V",
+                "caption": "VOLTAGE",
+                "value": 5.0,
+                "value_min": 4.0,
+                "value_ranges": [
+                    [
+                        6.0,
+                        "Error"
+                    ],
+                    [
+                        6.6,
+                        "Warning"
+                    ],
+                    [
+                        8.4,
+                        "Ok"
+                    ],
+                    [
+                        10.0,
+                        "Error"
+                    ]
+                ]
+            }
         }
     ]
 }

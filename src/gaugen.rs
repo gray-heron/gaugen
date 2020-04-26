@@ -1,23 +1,22 @@
+use crate::frontend;
+
 use nalgebra::Vector2;
 use nanovg::Frame;
 use serde;
 use serde_json;
 use std::collections::HashMap;
+use std::fs;
+use std::rc;
+
 //RunTime Parametric Structures
 
-#[derive(Copy, Clone, PartialEq)]
-enum Status {
-    Ok,
-    Warning,
-    Error,
-}
 
 pub struct DrawZone {
     pub m: Vector2<f32>,
-    pub size: Vector2<f32>
+    pub size: Vector2<f32>,
 }
 
-impl DrawZone{
+impl DrawZone {
     pub fn left(&self) -> f32 {
         self.m.x - self.size.x / 2.0
     }
@@ -34,20 +33,12 @@ impl DrawZone{
         self.m.y - self.size.y / 2.0
     }
 
-    pub fn from_rect(bottom_left: Vector2<f32>, top_right: Vector2<f32>) -> DrawZone{
+    pub fn from_rect(bottom_left: Vector2<f32>, top_right: Vector2<f32>) -> DrawZone {
         DrawZone {
             m: (bottom_left + top_right) / 2.0,
-            size: top_right - bottom_left
+            size: top_right - bottom_left,
         }
     }
-}
-
-pub struct Resources {}
-
-pub struct PresentationContext<'a> {
-    frame: &'a nanovg::Frame<'a>,
-    time: f32,
-    fonts: &'a Resources,
 }
 
 //pub trait Deserializable {
@@ -55,8 +46,8 @@ pub struct PresentationContext<'a> {
 //}
 
 pub struct ControlGeometry {
-    aspect: Option<f32>,
-    size_preference: Option<f32>,
+    pub aspect: Option<f32>,
+    pub size_preference: Option<f32>,
 }
 
 pub trait Component<TComponentData>
@@ -65,14 +56,13 @@ where
 {
     fn max_children(&self) -> Option<u32>;
     fn get_name(&self) -> &'static str;
-
     fn get_size(&self) -> ControlGeometry;
 
     fn draw(
         &self,
-        ctx: &mut PresentationContext,
+        ctx: &frontend::PresentationContext,
         zone: DrawZone,
-        children: &[(ControlGeometry, Box<dyn FnMut(DrawZone) + '_>)],
+        children: &[(ControlGeometry, Box<dyn Fn(DrawZone) + '_>)],
         data: &TComponentData,
     );
 }
@@ -80,44 +70,53 @@ where
 struct ControlInstance {
     draw: Box<
         dyn Fn(
-            &mut PresentationContext,
+            &frontend::PresentationContext,
             DrawZone,
-            &[(ControlGeometry, Box<dyn FnMut(DrawZone) + '_>)],
+            &[(ControlGeometry, Box<dyn Fn(DrawZone) + '_>)],
         ),
     >,
     get_size: Box<dyn Fn() -> ControlGeometry>,
 }
 
-struct TreeComponent {
+pub struct TreeComponent {
     children: Vec<TreeComponent>,
     control: ControlInstance,
+    name: Option<String>,
 }
 
 impl TreeComponent {
-    fn draw(&self, ctx: &mut PresentationContext, zone: DrawZone) {
-        let sizes_n_draws: Vec<(ControlGeometry, Box<dyn FnMut(DrawZone)>)> = Vec::new();
+    pub fn draw(&self, ctx: &frontend::PresentationContext, zone: DrawZone) {
+        let mut sizes_n_draws: Vec<(ControlGeometry, Box<dyn Fn(DrawZone)>)> = Vec::new();
         for child in &self.children {
-            let b = Box::new(|z: DrawZone| child.draw(ctx, z));
+            let b = Box::new(move |z: DrawZone|{
+                child.draw(ctx, z)
+            });
             sizes_n_draws.push((child.control.get_size.as_ref()(), b));
         }
         self.control.draw.as_ref()(ctx, zone, &sizes_n_draws[..]);
     }
 }
 
-struct Manager {
+pub struct Manager {
     controls_types:
-        HashMap<&'static str, Box<dyn Fn(serde_json::Value) -> Option<ControlInstance>>>,
+        HashMap<&'static str, Box<dyn Fn(&serde_json::Value) -> Option<ControlInstance>>>
 }
 
 impl Manager {
     pub fn register_component_type<TComponentData>(
-        &self,
-        component: &'static dyn Component<TComponentData>,
+        &mut self,
+        component: Box<dyn Component<TComponentData>>,
     ) where
-        TComponentData: serde::de::DeserializeOwned,
+        TComponentData: serde::de::DeserializeOwned + 'static,
     {
-        let mk_instance = Box::new(|json: serde_json::Value| -> Option<ControlInstance> {
-            let maybe_data = &TComponentData::deserialize(&json);
+        let stored_component = rc::Rc::new(component);
+        let __stored_component = rc::Rc::clone(&stored_component);
+
+        let mk_instance = Box::new(move |json: &serde_json::Value| -> Option<ControlInstance> {
+            let __stored_component1 = rc::Rc::clone(&__stored_component);
+            let __stored_component2 = rc::Rc::clone(&__stored_component);
+
+            let maybe_data = TComponentData::deserialize(json);
 
             match maybe_data {
                 Ok(data) => {
@@ -125,16 +124,16 @@ impl Manager {
                         ControlInstance {
                             draw:
                                 Box::new(
-                                    |ctx: &mut PresentationContext,
+                                    move |ctx: &frontend::PresentationContext,
                                      zone: DrawZone,
                                      children: &[(
                                         ControlGeometry,
-                                        Box<dyn FnMut(DrawZone)>,
+                                        Box<dyn Fn(DrawZone)>,
                                     )]| {
-                                        component.draw(ctx, zone, children, data);
+                                        __stored_component1.as_ref().draw(ctx, zone, children, &data);
                                     },
                                 ),
-                            get_size: Box::new(|| component.get_size()),
+                            get_size: Box::new(move || __stored_component2.as_ref().get_size()),
                         },
                     )
                 }
@@ -143,33 +142,47 @@ impl Manager {
         });
 
         self.controls_types
-            .insert(component.get_name(), mk_instance);
+            .insert(stored_component.as_ref().get_name(), mk_instance);
     }
 
-    pub fn make_screen(&self, json: &String) -> Option<TreeComponent> {
-        let data: serde_json::Value = serde_json::from_str(json).unwrap();
+    pub fn make_screen(&self, path_to_json: &str) -> Option<TreeComponent> {
+        let json = fs::read_to_string(path_to_json).unwrap();
+        let data: serde_json::Value = serde_json::from_str(&json).unwrap();
 
         self.build_tree(&data)
     }
 
-    fn build_tree(&self, v: &serde_json::Value) -> Option<TreeComponent> {
-        let make_control = self.controls_types[v["type"].as_str().unwrap()];
-        let component_type = v["type"].as_str().unwrap();
+    pub fn build_tree(&self, v: &serde_json::Value) -> Option<TreeComponent> {
+        let make_control = &self.controls_types[v["type"].as_str().unwrap()];
 
         let mut children: Vec<TreeComponent> = Vec::new();
 
-        for child in v["children"].as_array().unwrap() {
-            children.push(self.build_tree(child).unwrap());
+        match v["children"].as_array() {
+            Some(json_children) => 
+                for child in json_children {
+                    children.push(self.build_tree(child).unwrap());
+                },
+            None => {}
         }
 
-        match make_control(v["data"]) {
+        match make_control(&v["data"]) {
             Some(control) => Some(TreeComponent {
                 children: children,
                 control: control,
+                name: match v["name"].as_str() {
+                    Some(s) => Some(s.to_string()),
+                    None => None,
+                },
             }),
             None => None,
         }
     }
 
-    fn draw(&self, ctx: &mut PresentationContext, zone: DrawZone) {}
+    //pub fn draw(&self, ctx: &frontend::PresentationContext, zone: DrawZone) {}
+
+    pub fn new() -> Manager{
+        Manager{
+            controls_types: HashMap::new()
+        }
+    }
 }

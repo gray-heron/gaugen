@@ -1,7 +1,8 @@
-mod rtps;
+mod basic_components;
+mod frontend;
 mod gaugen;
-mod indicators;
 mod geometry_components;
+mod rtps;
 
 extern crate gl;
 extern crate glutin;
@@ -16,11 +17,10 @@ use nanovg::{
     Intersect, LineCap, LineJoin, PathOptions, Scissor, Solidity, StrokeOptions, TextOptions,
     Transform, Winding,
 };
-use rand::Rng;
-use std::f32::consts;
-use std::time::Instant;
+use nalgebra::Vector2;
 
-use na::{Quaternion, UnitQuaternion, Vector2, Vector3};
+use rand::Rng;
+use std::time::Instant;
 
 const INIT_WINDOW_SIZE: (u32, u32) = (800, 800);
 
@@ -32,6 +32,16 @@ const ICON_LOGIN: &str = "\u{E740}";
 const ICON_TRASH: &str = "\u{E729}";
 
 const GRAPH_HISTORY_COUNT: usize = 100;
+
+fn clamp(value: f32, min: f32, max: f32) -> f32 {
+    if value < min {
+        min
+    } else if value > max {
+        max
+    } else {
+        value
+    }
+}
 
 struct DemoData<'a> {
     fonts: DemoFonts<'a>,
@@ -90,6 +100,15 @@ fn main() {
 
     let mut active_gamepad = None;
 
+    let mut gui_manager = gaugen::Manager::new();
+    basic_components::register_basic_components(&mut gui_manager);
+    geometry_components::register_geometry_components(&mut gui_manager);
+
+    let resources = frontend::Resources {
+        palette: Box::new(frontend::DarkPalette {}),
+        font: demo_data.fonts.sans,
+    };
+
     while running {
         let elapsed = get_elapsed(&start_time);
         let delta_time = elapsed - prev_time;
@@ -125,19 +144,21 @@ fn main() {
         }
 
         context.frame((width, height), gl_window.hidpi_factor(), |frame| {
-            render_demo(
-                &frame,
-                match active_gamepad {
-                    Some(id) => Some(gilrs.gamepad(id)),
-                    None => None,
-                },
-                mx,
-                my,
-                width as f32,
-                height as f32,
-                elapsed,
-                &demo_data,
+            let mut ctx = frontend::PresentationContext {
+                frame: &frame,
+                time: elapsed,
+                resources: &resources,
+            };
+
+            let zone = gaugen::DrawZone::from_rect(
+                Vector2::new(0.0, 0.0),
+                Vector2::new(width, height),
             );
+
+            match gui_manager.make_screen("screen.json") {
+                Some(screen) => screen.draw(&mut ctx, zone),
+                None => {}
+            };
 
             /*
             fps_graph.draw(&frame, demo_data.fonts.sans, 5.0, 5.0);
@@ -211,382 +232,7 @@ fn get_elapsed(instant: &Instant) -> f32 {
     elapsed as f32
 }
 
-fn clamp(value: f32, min: f32, max: f32) -> f32 {
-    if value < min {
-        min
-    } else if value > max {
-        max
-    } else {
-        value
-    }
-}
-
-const CGA: f32 = consts::PI / 8.0;
-
-
-
-fn StatusToColor(s: Status) -> Color {
-    match s {
-        Status::Ok => Color::from_rgba(0, 160, 0, 255),
-        Status::Warning => Color::from_rgba(250, 120, 0, 255),
-        Status::Error => Color::from_rgba(200, 0, 0, 255),
-    }
-}
-
-fn StatusToColorBg(s: Status) -> Color {
-    match s {
-        Status::Ok => Color::from_rgba(30, 30, 40, 255),
-        Status::Warning => Color::from_rgba(0xbe, 0x55, 0, 255),
-        Status::Error => Color::from_rgba(200 / 2, 0, 0, 255),
-    }
-}
-
-fn FormatFloat(v: f32, decimals: u32) -> String {
-    let mut ret: String = "".to_string();
-    let mut countdown = false;
-    let mut counter = decimals;
-    let s = v.to_string();
-
-    for c in s.chars() {
-        if countdown {
-            if counter == 0 {
-                break;
-            }
-
-            counter -= 1;
-        } else if c == '.' {
-            countdown = true;
-        }
-
-        ret.push(c);
-    }
-
-    for _ in 0..counter {
-        ret.push('0');
-    }
-
-    ret
-}
-
-struct RotationalIndicator {
-    precision: u32,
-    unit: String,
-    caption: String,
-    value_min: f32,
-    value_ranges: Vec<(f32, Status)>,
-}
-
-impl RotationalIndicator {
-    fn draw(&self, ctx: &PresentationContext, value: f32, frame: &Frame, width: f32, height: f32) {
-        let base_radius = (if width > height { height } else { width }) / 2.5;
-        let base_thickness = base_radius / 10.0;
-
-        let value_max = self.value_ranges[self.value_ranges.len() - 1].0;
-
-        let normalize = |value: f32| {
-            if value < self.value_min {
-                0.0
-            } else if value > value_max {
-                1.0
-            } else {
-                (value - self.value_min) / (value_max - self.value_min)
-            }
-        };
-
-        let smartarc = |p0: f32,
-                        p1: f32,
-                        radius: f32,
-                        stroke_width: f32,
-                        stroke_color: Color,
-                        fill_color: Color| {
-            let arcstart = p0 * (consts::PI + CGA * 2.0);
-            let arcend = (1.0 - p1) * (consts::PI + CGA * 2.0);
-
-            frame.path(
-                |path| {
-                    path.arc(
-                        (width / 2.0, height / 2.0 - base_radius * 0.0),
-                        radius,
-                        0.0 + CGA - arcend,
-                        consts::PI - CGA + arcstart,
-                        Winding::Direction(Direction::CounterClockwise),
-                    );
-                    path.fill(fill_color, Default::default());
-                    path.stroke(
-                        stroke_color,
-                        StrokeOptions {
-                            width: stroke_width,
-                            ..Default::default()
-                        },
-                    );
-                },
-                Default::default(),
-            );
-        };
-
-        let mut last_range_end = normalize(self.value_min);
-
-        let mut value_status = Status::Error;
-
-        let nvalue = normalize(value);
-
-        for range_end in &self.value_ranges {
-            let current_range_end = normalize(range_end.0);
-            smartarc(
-                last_range_end,
-                current_range_end,
-                base_radius * 1.13,
-                base_thickness,
-                StatusToColor(range_end.1),
-                Color::from_rgba(0, 0, 0, 0),
-            );
-
-            if nvalue > last_range_end && nvalue <= current_range_end {
-                value_status = range_end.1;
-            }
-
-            last_range_end = current_range_end;
-        }
-
-        smartarc(
-            0.0,
-            1.0,
-            base_radius * 1.09,
-            0.0,
-            Color::from_rgba(160, 160, 160, 255),
-            StatusToColorBg(value_status),
-        );
-
-        if nvalue > 0.0 {
-            smartarc(
-                0.0,
-                nvalue,
-                base_radius,
-                base_thickness * 1.75,
-                Color::from_rgba(255, 255, 255, 255),
-                Color::from_rgba(0, 0, 0, 0),
-            );
-        }
-
-        let text_opts_caption = TextOptions {
-            color: Color::from_rgba(180, 180, 180, 255),
-            size: base_radius / 2.0,
-            align: Alignment::new().center().middle(),
-            line_height: base_radius / 3.0,
-            line_max_width: width,
-            ..Default::default()
-        };
-
-        let text_opts_value = TextOptions {
-            color: Color::from_rgba(255, 255, 255, 255),
-            size: base_radius / 1.55,
-            align: Alignment::new().center().middle(),
-            line_height: base_radius / 2.5,
-            line_max_width: width,
-            ..Default::default()
-        };
-
-        if value_status != Status::Error || ctx.time * 2.0 - ((ctx.time * 2.0) as i32 as f32) < 0.66
-        {
-            frame.text_box(
-                ctx.fonts.sans,
-                (0.0, height / 2.0 + base_radius / 1.5),
-                &self.caption,
-                text_opts_caption,
-            );
-        }
-        frame.text_box(
-            ctx.fonts.sans,
-            (0.0, height / 2.0 - base_radius / 10.0),
-            FormatFloat(value, self.precision) + &self.unit,
-            text_opts_value,
-        );
-    }
-}
-
-struct SpatialSituationIndicator {
-    projection_zoom: f32,
-    o: UnitQuaternion<f32>,
-}
-
-trait DegreeTrigonometry {
-    fn rad(&self) -> f32;
-    fn deg(&self) -> f32;
-}
-
-impl DegreeTrigonometry for f32 {
-    fn rad(&self) -> f32 {
-        self / 180.0 * consts::PI
-    }
-
-    fn deg(&self) -> f32 {
-        self / consts::PI * 180.0
-    }
-}
-
-impl SpatialSituationIndicator {
-    fn projection(&self, p: Vector2<f32>) -> Option<Vector2<f32>> {
-        let v3 = UnitQuaternion::from_euler_angles(0.0, p.y.rad(), p.x.rad())
-            * Vector3::new(1.0, 0.0, 0.0);
-        let out = self.o.inverse() * v3;
-
-        match out.x > 0.0 {
-            true => Some(Vector2::new(
-                out.y * self.projection_zoom,
-                out.z * self.projection_zoom,
-            )),
-            _ => None,
-        }
-    }
-
-    pub fn draw_line<F>(
-        &self,
-        frame: &Frame,
-        zone: &DrawZone,
-        p1: Vector2<f32>,
-        p2: Vector2<f32>,
-        path_style: F,
-    ) where
-        F: Fn(&nanovg::Path),
-    {
-        match (self.projection(p1), self.projection(p2)) {
-            (Some(tp1), Some(tp2)) => {
-                frame.path(
-                    |path| {
-                        let from = (tp1.x * zone.width + zone.mx, tp1.y * zone.height + zone.my);
-                        let to = (tp2.x * zone.width + zone.mx, tp2.y * zone.height + zone.my);
-                        path.move_to(from);
-                        path.line_to(to);
-                        path_style(&path);
-                    },
-                    Default::default(),
-                );
-            }
-            _ => {}
-        }
-    }
-
-    pub fn draw_text(
-        &self,
-        ctx: &PresentationContext,
-        zone: &DrawZone,
-        t: String,
-        p: Vector2<f32>,
-    ) {
-        let linelen = zone.height / 2.0;
-        let text_opts_value = TextOptions {
-            color: Color::from_rgba(255, 255, 255, 255),
-            size: zone.height / 15.0,
-            align: Alignment::new().center().middle(),
-            line_height: zone.height / 15.0,
-            line_max_width: linelen,
-            ..Default::default()
-        };
-
-        match self.projection(p) {
-            Some(tp) => ctx.frame.text_box(
-                ctx.fonts.sans,
-                (tp.x * zone.width + zone.mx - linelen / 2.0, tp.y * zone.height + zone.my),
-                t,
-                text_opts_value,
-            ),
-            _ => {}
-        }
-    }
-
-    pub fn draw_ffd(
-        &self,
-        ctx: &PresentationContext,
-        zone: &DrawZone
-    ) {
-        let unit = zone.height / 20.0;
-        ctx.frame.path(
-            |path| {
-                path.move_to((zone.mx - 2.0 * unit, zone.my));
-                path.line_to((zone.mx - 0.66 * unit, zone.my));
-                path.line_to((zone.mx, zone.my + unit));
-                path.line_to((zone.mx + 0.66 * unit, zone.my));
-                path.line_to((zone.mx + 2.0 * unit, zone.my));
-
-                path.circle((zone.mx, zone.my), 1.0);
-    
-                path.stroke(
-                    Color::from_rgba(0xff, 0xff, 0x20, 0xa2),
-                    StrokeOptions {
-                        width: 3.0,
-                        ..Default::default()
-                    },
-                );
-            },
-            Default::default(),
-        );
-
-    }
-
-    pub fn draw(
-        &self,
-        ctx: &PresentationContext,
-        zone: &DrawZone,
-        frame: &Frame,
-    ) {
-        let orientation = self.o.euler_angles();
-
-        //draw vertical ladder
-        for i in -22..22 {
-            let h = (i * 5) as f32;
-            let p1 = Vector2::new(5.0 + orientation.2.deg(), h);
-            let p2 = Vector2::new(-5.0 + orientation.2.deg(), h);
-            let p3 = Vector2::new(6.3 + orientation.2.deg(), h);
-
-            self.draw_line(frame, zone, p1, p2, |path| {
-                path.stroke(
-                    Color::from_rgba(0x80, 0x80, 0x80, 0xff),
-                    StrokeOptions {
-                        width: 1.5,
-                        ..Default::default()
-                    },
-                );
-            });
-
-            if i != 0 && i * 5 <= 90 {
-                self.draw_text(ctx, zone, (i * 5).to_string(), p3)
-            }
-        }
-
-        let spacing = match orientation.1.deg().abs() > 60.0 {
-            true => 30,
-            _ => 10,
-        };
-
-        let ladder_height = match orientation.1.deg().abs() < 75.0 {
-            true => orientation.1.deg(),
-            _ => orientation.1.deg().signum() * 75.0,
-        };
-
-        //draw horizontal ladder
-        for i in 0 / spacing..360 / spacing {
-            let y = (i * spacing) as f32;
-            let p1 = Vector2::new(y, 3.0 + ladder_height);
-            let p2 = Vector2::new(y, -3.0 + ladder_height);
-            let p3 = Vector2::new(y, 0.0 + ladder_height);
-
-            self.draw_line(frame, zone, p1, p2, |path| {
-                path.stroke(
-                    Color::from_rgba(0x80, 0x80, 0x80, 0xff),
-                    StrokeOptions {
-                        width: 1.5,
-                        ..Default::default()
-                    },
-                );
-            });
-
-            self.draw_text(ctx, zone, (i * spacing).to_string(), p3)
-        }
-
-        self.draw_ffd(ctx, zone);
-    }
-}
-
+/*
 fn render_demo(
     frame: &Frame,
     gamepad: Option<gilrs::Gamepad>,
@@ -642,7 +288,7 @@ fn render_demo(
 
     //ri.Draw(&ctx, &data.fonts, t / 2.0 + 3.0, frame, width, height);
 }
-
+*/
 enum GraphRenderStyle {
     Fps,
     Ms,
