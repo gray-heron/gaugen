@@ -25,7 +25,6 @@ fn FormatFloat(v: f32, decimals: u32) -> String {
             }
 
             counter -= 1;
-            
         } else if c == '.' {
             countdown = true;
         }
@@ -58,20 +57,18 @@ pub struct RotationalIndicatorData {
     pub value_ranges: Vec<(f32, Status)>,
 }
 
-impl Component<RotationalIndicatorData> for RotationalIndicator {
+impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
     fn draw(
         &self,
         ctx: &PresentationContext,
         zone: DrawZone,
-        children: &[(ControlGeometry, Box<dyn Fn(DrawZone) + '_>)],
-        data: &RotationalIndicatorData,
+        __children: &mut [Box<dyn FnMut(DrawZone) + '_>],
+        __internal_data: &mut (),
+        data: &RotationalIndicatorData
     ) {
-        let base_radius = (if zone.size.x > zone.size.y {
-            zone.size.y
-        } else {
-            zone.size.x
-        }) / 2.5; //fixme
+        let base_radius = zone.size.x / 2.4;
         let base_thickness = base_radius / 10.0;
+        let ymo = base_radius / -5.5; //y middle offset
 
         let value_max = data.value_ranges[data.value_ranges.len() - 1].0;
 
@@ -97,7 +94,7 @@ impl Component<RotationalIndicatorData> for RotationalIndicator {
             ctx.frame.path(
                 |path| {
                     path.arc(
-                        (zone.m.x, zone.m.y),
+                        (zone.m.x, zone.m.y - ymo),
                         radius,
                         0.0 + CGA - arcend,
                         consts::PI - CGA + arcstart,
@@ -182,17 +179,39 @@ impl Component<RotationalIndicatorData> for RotationalIndicator {
         {
             ctx.frame.text_box(
                 ctx.resources.font,
-                (zone.left(), zone.m.y + base_radius / 1.5),
+                (zone.left(), zone.m.y + base_radius / 1.5 - ymo),
                 &data.caption,
                 text_opts_caption,
             );
         }
         ctx.frame.text_box(
             ctx.resources.font,
-            (zone.left(), zone.m.y - base_radius / 10.0),
+            (zone.left(), zone.m.y - base_radius / 10.0 - ymo),
             FormatFloat(data.value, data.precision) + &data.unit,
             text_opts_value,
         );
+    }
+
+    fn init_instance(
+        &self,
+        __data: &RotationalIndicatorData,
+        __sizes: &[ControlGeometry],
+    ) -> AfterInit<()>{
+        AfterInit{
+            aspect: Some(1.15),
+            internal_data: ()
+        }
+    }
+
+    fn get_default_data(&self) -> Option<RotationalIndicatorData> {
+        Some(RotationalIndicatorData {
+            precision: 1,
+            unit: "".to_string(),
+            caption: "".to_string(),
+            value: 50.0,
+            value_min: 0.0,
+            value_ranges: vec![(100.0, Status::Ok)],
+        })
     }
 
     fn max_children(&self) -> Option<u32> {
@@ -201,13 +220,6 @@ impl Component<RotationalIndicatorData> for RotationalIndicator {
 
     fn get_name(&self) -> &'static str {
         "RotationalIndicator"
-    }
-
-    fn get_size(&self) -> ControlGeometry {
-        ControlGeometry {
-            aspect: Some(1.0),
-            size_preference: None,
-        }
     }
 }
 

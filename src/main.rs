@@ -156,7 +156,21 @@ fn main() {
             );
 
             match gui_manager.make_screen("screen.json") {
-                Some(screen) => screen.draw(&mut ctx, zone),
+                Some((ref mut screen, ref geometry)) => {
+                    match geometry.aspect {
+                        Some(aspect) => {
+                            let corrected_zone = gaugen::DrawZone {
+                                m: zone.m,
+                                size: match aspect > zone.aspect(){
+                                    true => Vector2::new(zone.size.x, 1.0 / aspect * zone.size.x),
+                                    false => Vector2::new(aspect * zone.size.y, zone.size.y),
+                                }
+                            };
+                            screen.draw(&mut ctx, corrected_zone);
+                        },
+                        None => screen.draw(&mut ctx, zone)
+                    }
+                }
                 None => {}
             };
 

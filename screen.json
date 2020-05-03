@@ -1,7 +1,9 @@
 {
-    "type": "VerticalSplit",
+    "type": "Split",
     "data": {
-        "spacing": 0.9
+        "spacing": 0.9,
+        "direction": "Horizontal",
+        "mode": "EqualSide"
     },
     "children": [
         {
@@ -93,6 +95,10 @@
                     ]
                 ]
             }
+        }
+        ,
+        {
+            "type": "RotationalIndicator"
         }
     ]
 }
