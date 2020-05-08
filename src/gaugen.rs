@@ -32,11 +32,11 @@ impl DrawZone {
         self.m.y - self.size.y / 2.0
     }
 
-    pub fn bottom_left(&self) -> Vector2<f32>{
+    pub fn bottom_left(&self) -> Vector2<f32> {
         Vector2::new(self.left(), self.bottom())
     }
 
-    pub fn top_right(&self) -> Vector2<f32>{
+    pub fn top_right(&self) -> Vector2<f32> {
         Vector2::new(self.right(), self.top())
     }
 
@@ -47,7 +47,7 @@ impl DrawZone {
         }
     }
 
-    pub fn aspect(&self) -> f32{
+    pub fn aspect(&self) -> f32 {
         self.size.x / self.size.y
     }
 }
@@ -75,6 +75,7 @@ where
     fn get_default_data(&self) -> Option<TComponentPublicInstanceData>;
     fn init_instance(
         &self,
+        ctx: &frontend::PresentationContext,
         data: &TComponentPublicInstanceData,
         sizes: &[ControlGeometry],
     ) -> AfterInit<TComponentInternalInstanceData>;
@@ -89,8 +90,13 @@ where
     );
 }
 
-type WrappedInit =
-    Box<dyn Fn(&serde_json::Value, &[ControlGeometry]) -> Option<(WrappedDraw, ControlGeometry)>>;
+type WrappedInit = Box<
+    dyn Fn(
+        &frontend::PresentationContext,
+        &serde_json::Value,
+        &[ControlGeometry],
+    ) -> Option<(WrappedDraw, ControlGeometry)>,
+>;
 type WrappedDraw =
     Box<dyn FnMut(&frontend::PresentationContext, DrawZone, &mut [Box<dyn FnMut(DrawZone) + '_>])>;
 
@@ -117,6 +123,7 @@ pub struct Manager {
 
 impl Manager {
     fn mk_init<T1, T2>(
+        ctx: &frontend::PresentationContext,
         component_type: std::rc::Rc<Box<dyn Component<T1, T2>>>, // fixme Rc<Box> => Rc
         children: &[ControlGeometry],
         public_data: T1,
@@ -126,10 +133,11 @@ impl Manager {
         T1: serde::de::DeserializeOwned + 'static,
         T2: 'static,
     {
-        let after_init = component_type
-            .as_ref()
-            .as_ref()
-            .init_instance(&public_data, children);
+        let after_init =
+            component_type
+                .as_ref()
+                .as_ref()
+                .init_instance(ctx, &public_data, children);
         let mut internal_data = after_init.internal_data;
 
         match component_type.max_children() {
@@ -169,9 +177,11 @@ impl Manager {
         let __stored_component = rc::Rc::clone(&stored_component);
 
         let mk_wrapped_init = Box::new(
-            move |json: &serde_json::Value,
+            move |ctx: &frontend::PresentationContext,
+                  json: &serde_json::Value,
                   children: &[ControlGeometry]|
                   -> Option<(WrappedDraw, ControlGeometry)> {
+                      
                 let __stored_component2 = rc::Rc::clone(&__stored_component);
                 let maybe_data = match TComponentData::deserialize(json) {
                     Ok(data) => Some(data),
@@ -179,7 +189,13 @@ impl Manager {
                 };
 
                 match maybe_data {
-                    Some(data) => Some(Manager::mk_init(__stored_component2, children, data, 1.0)),
+                    Some(data) => Some(Manager::mk_init(
+                        ctx,
+                        __stored_component2,
+                        children,
+                        data,
+                        1.0,
+                    )),
                     None => None,
                 }
             },
@@ -189,14 +205,25 @@ impl Manager {
             .insert(stored_component.as_ref().get_name(), mk_wrapped_init);
     }
 
-    pub fn make_screen(&self, path_to_json: &str) -> Option<(TreeComponent, ControlGeometry)> {
+    pub fn make_screen(
+        &self,
+        ctx: &frontend::PresentationContext,
+        path_to_json: &str,
+    ) -> Option<(TreeComponent, ControlGeometry)> {
         let json = fs::read_to_string(path_to_json).unwrap();
-        let data: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let data: serde_json::Value = match serde_json::from_str(&json){
+            Ok(data) => data,
+            Err(_) => return None
+        };
 
-        self.build_tree(&data)
+        self.build_tree(ctx, &data)
     }
 
-    pub fn build_tree(&self, v: &serde_json::Value) -> Option<(TreeComponent, ControlGeometry)> {
+    pub fn build_tree(
+        &self,
+        ctx: &frontend::PresentationContext,
+        v: &serde_json::Value,
+    ) -> Option<(TreeComponent, ControlGeometry)> {
         let mk_init = &self.controls_types[v["type"].as_str()?];
 
         let mut children: Vec<TreeComponent> = Vec::new();
@@ -205,7 +232,7 @@ impl Manager {
         match v["children"].as_array() {
             Some(json_children) => {
                 for json_child in json_children {
-                    let child_n_geometry = self.build_tree(json_child)?;
+                    let child_n_geometry = self.build_tree(ctx, json_child)?;
                     children.push(child_n_geometry.0);
                     children_geometries.push(child_n_geometry.1);
                 }
@@ -213,7 +240,7 @@ impl Manager {
             None => {}
         }
 
-        match mk_init(&v["data"], &children_geometries) {
+        match mk_init(ctx, &v["data"], &children_geometries) {
             Some((wrapped_draw, geometry)) => Some((
                 TreeComponent {
                     children: children,

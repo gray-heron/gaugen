@@ -1,104 +1,71 @@
 {
     "type": "Split",
     "data": {
-        "spacing": 0.9,
-        "direction": "Horizontal",
+        "spacing": 1.0,
+        "direction": "Vertical",
         "mode": "EqualSide"
     },
     "children": [
         {
+            "type": "TextField",
+            "data": {
+                "text": "Hello, my name is",
+                "front_color": "ffffffff",
+                "back_color": "ff100080"
+            }
+        },
+        {
             "type": "Spacer",
             "data": {
                 "spacing": 1.0
-            },      
-            "children": [{
-                "type": "RotationalIndicator",
-                "data": {
-                    "precision": 2,
-                    "unit": "V",
-                    "caption": "VOLTAGE",
-                    "value": 8.0,
-                    "value_min": 4.0,
-                    "value_ranges": [
-                        [
-                            6.0,
-                            "Error"
-                        ],
-                        [
-                            6.6,
-                            "Warning"
-                        ],
-                        [
-                            9.8,
-                            "Ok"
-                        ],
-                        [
-                            11.0,
-                            "Error"
+            },
+            "children": [
+                {
+                    "type": "RotationalIndicator",
+                    "data": {
+                        "precision": 2,
+                        "unit": "V",
+                        "caption": "VOLTAGE",
+                        "value": 6.2,
+                        "value_min": 4.0,
+                        "value_ranges": [
+                            [
+                                6.0,
+                                "Error"
+                            ],
+                            [
+                                6.6,
+                                "Warning"
+                            ],
+                            [
+                                9.8,
+                                "Ok"
+                            ],
+                            [
+                                11.0,
+                                "Error"
+                            ]
                         ]
-                    ]
+                    }
                 }
-            }]
+            ]
         },
         {
-            "type": "RotationalIndicator",
-            "data": {
-                "precision": 2,
-                "unit": "V",
-                "caption": "VOLTAGE",
-                "value": 5.0,
-                "value_min": 4.0,
-                "value_ranges": [
-                    [
-                        6.0,
-                        "Error"
-                    ],
-                    [
-                        6.6,
-                        "Warning"
-                    ],
-                    [
-                        8.4,
-                        "Ok"
-                    ],
-                    [
-                        10.0,
-                        "Error"
-                    ]
-                ]
-            }
-        },
-        {
-            "type": "RotationalIndicator",
-            "data": {
-                "precision": 2,
-                "unit": "V",
-                "caption": "VOLTAGE",
-                "value": 5.0,
-                "value_min": 4.0,
-                "value_ranges": [
-                    [
-                        6.0,
-                        "Error"
-                    ],
-                    [
-                        6.6,
-                        "Warning"
-                    ],
-                    [
-                        8.4,
-                        "Ok"
-                    ],
-                    [
-                        10.0,
-                        "Error"
-                    ]
-                ]
-            }
-        }
-        ,
-        {
-            "type": "RotationalIndicator"
+            "type": "Split",
+            "children": [
+                {
+                    "type": "RotationalIndicator"
+                },
+                {
+                    "type": "RotationalIndicator"
+                },
+                {
+                    "type": "RotationalIndicator"
+                },
+                {
+                    "type": "RotationalIndicator"
+                }
+            ]
         }
     ]
 }

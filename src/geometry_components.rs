@@ -29,6 +29,7 @@ impl gaugen::Component<SpacerInstance, ()> for Spacer {
 
     fn init_instance(
         &self,
+        __ctx: &frontend::PresentationContext,
         data: &SpacerInstance,
         sizes: &[gaugen::ControlGeometry],
     ) -> gaugen::AfterInit<()>{
@@ -144,6 +145,7 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
 
     fn init_instance(
         &self,
+        __ctx: &frontend::PresentationContext,
         data: &SplitInstance,
         sizes: &[gaugen::ControlGeometry],
     ) -> gaugen::AfterInit<SplitInternalData>{

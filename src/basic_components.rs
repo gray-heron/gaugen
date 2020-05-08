@@ -64,7 +64,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
         zone: DrawZone,
         __children: &mut [Box<dyn FnMut(DrawZone) + '_>],
         __internal_data: &mut (),
-        data: &RotationalIndicatorData
+        data: &RotationalIndicatorData,
     ) {
         let base_radius = zone.size.x / 2.4;
         let base_thickness = base_radius / 10.0;
@@ -143,7 +143,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             base_radius * 1.09,
             0.0,
             Color::from_rgba(160, 160, 160, 255),
-            ctx.resources.palette.as_ref().StatusToColorBg(value_status),
+            ctx.resources.palette.as_ref().StatusToColorBg(Status::Ok),
         );
 
         if nvalue > 0.0 {
@@ -167,7 +167,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
         };
 
         let text_opts_value = TextOptions {
-            color: Color::from_rgba(255, 255, 255, 255),
+            color: ctx.resources.palette.as_ref().StatusToColorFont(value_status),
             size: base_radius / 1.55,
             align: Alignment::new().center().middle(),
             line_height: base_radius / 2.5,
@@ -194,12 +194,13 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
 
     fn init_instance(
         &self,
+        __ctx: &PresentationContext,
         __data: &RotationalIndicatorData,
         __sizes: &[ControlGeometry],
-    ) -> AfterInit<()>{
-        AfterInit{
+    ) -> AfterInit<()> {
+        AfterInit {
             aspect: Some(1.15),
-            internal_data: ()
+            internal_data: (),
         }
     }
 
@@ -220,6 +221,97 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
 
     fn get_name(&self) -> &'static str {
         "RotationalIndicator"
+    }
+}
+
+// =========================== TEXT FIELD ===========================
+
+pub struct TextField {}
+
+#[derive(serde::Deserialize)]
+pub struct TextFieldData {
+    pub text: String,
+    pub front_color: SerializableColor,
+    pub back_color: SerializableColor,
+}
+
+impl Component<TextFieldData, ()> for TextField {
+    fn draw(
+        &self,
+        ctx: &PresentationContext,
+        zone: DrawZone,
+        __children: &mut [Box<dyn FnMut(DrawZone) + '_>],
+        __internal_data: &mut (),
+        data: &TextFieldData,
+    ) {
+        ctx.frame.path(
+            |path| {
+                path.rect(
+                    (zone.left(), zone.bottom()),
+                    (zone.size.x, zone.size.y)
+                );
+                path.fill(data.back_color.color, Default::default());
+            },
+            Default::default(),
+        );
+        
+        let text_opts = TextOptions {
+            color: data.front_color.color,
+            size: zone.size.y * 1.0,
+            align: Alignment::new().center().middle(),
+            line_height: zone.size.y * 1.0,
+            line_max_width: zone.size.x * 1.0,
+            ..Default::default()
+        };
+
+        ctx.frame.text_box(
+            ctx.resources.font,
+            (zone.left(), zone.m.y),
+            &data.text,
+            text_opts,
+        );
+    }
+
+    fn init_instance(
+        &self,
+        ctx: &PresentationContext,
+        data: &TextFieldData,
+        __sizes: &[ControlGeometry],
+    ) -> AfterInit<()> {
+        let bounds = ctx.frame.text_box_bounds(
+            ctx.resources.font,
+            (0.0, 0.0),
+            data.text.as_str(),
+            nanovg::TextOptions::default(),
+        );
+
+        let w = bounds.max_x - bounds.min_x;
+        let h = bounds.max_y - bounds.min_y;
+
+        AfterInit {
+            aspect: Some(w / h),
+            internal_data: (),
+        }
+    }
+
+    fn get_default_data(&self) -> Option<TextFieldData> {
+        Some(TextFieldData {
+            text: "<Placeholder>".to_string(),
+            front_color: SerializableColor{
+                color: Color::from_rgb(0x80, 0x80, 0x80)
+            },
+            back_color: SerializableColor{
+                color: Color::from_rgb(0x0, 0x0, 0x60)
+            }
+        })
+    }
+
+    fn max_children(&self) -> Option<u32> {
+        Some(0)
+    }
+
+    fn get_name(&self) -> &'static str {
+        "TextField"
     }
 }
 
@@ -410,6 +502,8 @@ impl SpatialSituationIndicator {
 
 pub fn register_basic_components(manager: &mut Manager) {
     let rt = Box::new(RotationalIndicator {});
+    let textfield = Box::new(TextField{});
 
     manager.register_component_type(rt);
+    manager.register_component_type(textfield);
 }

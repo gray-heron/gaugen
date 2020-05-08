@@ -155,7 +155,7 @@ fn main() {
                 Vector2::new(width, height),
             );
 
-            match gui_manager.make_screen("screen.json") {
+            match gui_manager.make_screen(&mut ctx, "screen.json") {
                 Some((ref mut screen, ref geometry)) => {
                     match geometry.aspect {
                         Some(aspect) => {
