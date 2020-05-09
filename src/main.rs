@@ -22,6 +22,9 @@ use nalgebra::Vector2;
 use rand::Rng;
 use std::time::Instant;
 
+use std::collections::HashMap;
+use serde_json::json;
+
 const INIT_WINDOW_SIZE: (u32, u32) = (800, 800);
 
 const ICON_SEARCH: &str = "\u{1F50D}";
@@ -155,6 +158,11 @@ fn main() {
                 Vector2::new(width, height),
             );
 
+            let mut hooks = HashMap::new();
+            let mut text_hook = serde_json::Map::new();
+            text_hook.insert("text".to_string(), json!("Hook works!"));
+            hooks.insert("textf".to_string(), text_hook);
+
             match gui_manager.make_screen(&mut ctx, "screen.json") {
                 Some((ref mut screen, ref geometry)) => {
                     match geometry.aspect {
@@ -166,9 +174,9 @@ fn main() {
                                     false => Vector2::new(aspect * zone.size.y, zone.size.y),
                                 }
                             };
-                            screen.draw(&mut ctx, corrected_zone);
+                            screen.draw(&mut ctx, corrected_zone, &hooks);
                         },
-                        None => screen.draw(&mut ctx, zone)
+                        None => screen.draw(&mut ctx, zone,  &hooks)
                     }
                 }
                 None => {}

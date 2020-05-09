@@ -8,6 +8,7 @@
     "children": [
         {
             "type": "TextField",
+            "name": "textf",
             "data": {
                 "text": "Hello, my name is",
                 "front_color": "ffffffff",
@@ -22,6 +23,7 @@
             "children": [
                 {
                     "type": "RotationalIndicator",
+                    "name": "volt",
                     "data": {
                         "precision": 2,
                         "unit": "V",

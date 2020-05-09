@@ -5,7 +5,7 @@ use nalgebra::Vector2;
 
 // =========================== SPACER ===========================
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SpacerInstance {
     spacing: f32,
 }
@@ -62,19 +62,19 @@ impl gaugen::Component<SpacerInstance, ()> for Spacer {
 
 // =========================== VERTICAL SPLIT ===========================
 
-#[derive(serde::Deserialize, std::cmp::PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, std::cmp::PartialEq)]
 pub enum SplitDirection{
     Horizontal,
     Vertical
 }
 
-#[derive(serde::Deserialize, std::cmp::PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, std::cmp::PartialEq)]
 pub enum SplitMode{
     EqualArea,
     EqualSide
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SplitInstance {
     spacing: f32,
     direction: SplitDirection,

@@ -8,6 +8,7 @@ pub enum Status {
     Error,
 }
 
+#[derive(Clone)]
 pub struct SerializableColor {
     pub color: Color,
 }
@@ -37,6 +38,24 @@ impl<'de> serde::de::Visitor<'de> for SerializableColorVisitor {
             Err(_) => Err(E::custom(format!("Color is in incorrect format"))),
         }
     }
+
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        match u32::from_str_radix(value.as_str(), 16) {
+            Ok(color) => Ok(SerializableColor {
+                color: Color::from_rgba(
+                    ((color >> 16) & 0xff) as u8,
+                    ((color >> 8) & 0xff) as u8,
+                    ((color >> 0) & 0xff) as u8,
+                    ((color >> 24) & 0xff) as u8,
+                ),
+            }),
+            Err(_) => Err(E::custom(format!("Color is in incorrect format"))),
+        }
+    }
 }
 
 impl<'de> serde::Deserialize<'de> for SerializableColor {
@@ -45,6 +64,20 @@ impl<'de> serde::Deserialize<'de> for SerializableColor {
         D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_string(SerializableColorVisitor)
+    }
+}
+
+impl serde::Serialize for SerializableColor {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        let a = (self.color.alpha() * 255.0) as u8;
+        let r = (self.color.red() * 255.0) as u8;
+        let g = (self.color.green() * 255.0) as u8;
+        let b = (self.color.blue() * 255.0) as u8;
+
+        serializer.serialize_str(format!("{:02x}{:02x}{:02x}{:02x}", a, r, g, b).as_str())
     }
 }
 

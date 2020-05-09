@@ -97,8 +97,16 @@ type WrappedInit = Box<
         &[ControlGeometry],
     ) -> Option<(WrappedDraw, ControlGeometry)>,
 >;
-type WrappedDraw =
-    Box<dyn FnMut(&frontend::PresentationContext, DrawZone, &mut [Box<dyn FnMut(DrawZone) + '_>])>;
+
+type WrappedDraw = Box<
+    dyn FnMut(
+        &frontend::PresentationContext,
+        DrawZone,
+        &mut [Box<dyn FnMut(DrawZone) + '_>],
+        &serde_json::Map<String, serde_json::Value>,
+    ),
+>;
+type Hooks = HashMap<String, serde_json::Map<String, serde_json::Value>>;
 
 pub struct TreeComponent {
     children: Vec<TreeComponent>,
@@ -107,13 +115,24 @@ pub struct TreeComponent {
 }
 
 impl TreeComponent {
-    pub fn draw(&mut self, ctx: &frontend::PresentationContext, zone: DrawZone) {
+    pub fn draw(&mut self, ctx: &frontend::PresentationContext, zone: DrawZone, hooks: &Hooks) {
         let mut draws: Vec<Box<dyn FnMut(DrawZone)>> = Vec::new();
         for child in &mut self.children {
-            let b = Box::new(move |z: DrawZone| child.draw(ctx, z));
+            let b = Box::new(move |z: DrawZone| child.draw(ctx, z, hooks));
             draws.push(b);
         }
-        self.draw.as_mut()(ctx, zone, &mut draws[..]);
+
+        let no_hooks = serde_json::Map::new();
+
+        let my_hooks = match &self.name {
+            Some(name) => match hooks.get(name) {
+                Some(hooks) => hooks,
+                None => &no_hooks,
+            },
+            None => &no_hooks,
+        };
+
+        self.draw.as_mut()(ctx, zone, &mut draws[..], my_hooks);
     }
 }
 
@@ -122,6 +141,28 @@ pub struct Manager {
 }
 
 impl Manager {
+    fn join_hooks<T>(value: &T, hooks: &serde_json::Map<String, serde_json::Value>) -> T
+    where
+        T: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
+    {
+        let mut serialized = match serde_json::to_value(value) {
+            Ok(serialized) => serialized,
+            _ => return value.clone(),
+        };
+
+        for hook in hooks {
+            serialized[hook.0] = hook.1.clone();
+        }
+
+        match serde_json::from_value(serialized) {
+            Ok(object) => object,
+            Err(er) => {
+                println!("Error while applying hook: {}", er);
+                value.clone()
+            }
+        }
+    }
+
     fn mk_init<T1, T2>(
         ctx: &frontend::PresentationContext,
         component_type: std::rc::Rc<Box<dyn Component<T1, T2>>>, // fixme Rc<Box> => Rc
@@ -130,7 +171,7 @@ impl Manager {
         size_preference: f32,
     ) -> (WrappedDraw, ControlGeometry)
     where
-        T1: serde::de::DeserializeOwned + 'static,
+        T1: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
         T2: 'static,
     {
         let after_init =
@@ -149,14 +190,27 @@ impl Manager {
             Box::new(
                 move |ctx: &frontend::PresentationContext,
                       zone: DrawZone,
-                      children: &mut [Box<dyn FnMut(DrawZone) + '_>]| {
-                    component_type.as_ref().as_ref().draw(
-                        ctx,
-                        zone,
-                        children,
-                        &mut internal_data,
-                        &public_data,
-                    )
+                      children: &mut [Box<dyn FnMut(DrawZone) + '_>],
+                      my_hooks: &serde_json::Map<String, serde_json::Value>| {
+                    if my_hooks.len() == 0 {
+                        component_type.as_ref().as_ref().draw(
+                            ctx,
+                            zone,
+                            children,
+                            &mut internal_data,
+                            &public_data,
+                        );
+                    } else {
+                        let merged_data = Manager::join_hooks(&public_data, my_hooks);
+
+                        component_type.as_ref().as_ref().draw(
+                            ctx,
+                            zone,
+                            children,
+                            &mut internal_data,
+                            &merged_data,
+                        );
+                    }
                 },
             ),
             ControlGeometry {
@@ -170,7 +224,7 @@ impl Manager {
         &mut self,
         component: Box<dyn Component<TComponentData, TPrivateComponentData>>,
     ) where
-        TComponentData: serde::de::DeserializeOwned + 'static,
+        TComponentData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
         TPrivateComponentData: 'static,
     {
         let stored_component = rc::Rc::new(component);
@@ -180,8 +234,8 @@ impl Manager {
             move |ctx: &frontend::PresentationContext,
                   json: &serde_json::Value,
                   children: &[ControlGeometry]|
-                  -> Option<(WrappedDraw, ControlGeometry)> {
-                      
+                  -> Option<(WrappedDraw, ControlGeometry)>
+            {
                 let __stored_component2 = rc::Rc::clone(&__stored_component);
                 let maybe_data = match TComponentData::deserialize(json) {
                     Ok(data) => Some(data),
@@ -211,9 +265,9 @@ impl Manager {
         path_to_json: &str,
     ) -> Option<(TreeComponent, ControlGeometry)> {
         let json = fs::read_to_string(path_to_json).unwrap();
-        let data: serde_json::Value = match serde_json::from_str(&json){
+        let data: serde_json::Value = match serde_json::from_str(&json) {
             Ok(data) => data,
-            Err(_) => return None
+            Err(_) => return None,
         };
 
         self.build_tree(ctx, &data)

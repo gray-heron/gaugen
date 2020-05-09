@@ -47,7 +47,7 @@ fn FormatFloat(v: f32, decimals: u32) -> String {
 
 pub struct RotationalIndicator {}
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct RotationalIndicatorData {
     pub precision: u32,
     pub unit: String,
@@ -228,7 +228,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
 
 pub struct TextField {}
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct TextFieldData {
     pub text: String,
     pub front_color: SerializableColor,
