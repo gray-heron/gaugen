@@ -126,7 +126,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
                 current_range_end,
                 base_radius * 1.13,
                 base_thickness,
-                ctx.resources.palette.as_ref().StatusToColor(range_end.1),
+                ctx.resources.palette.as_ref().status_to_color(range_end.1),
                 Color::from_rgba(0, 0, 0, 0),
             );
 
@@ -143,7 +143,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             base_radius * 1.09,
             0.0,
             Color::from_rgba(160, 160, 160, 255),
-            ctx.resources.palette.as_ref().StatusToColorBg(Status::Ok),
+            ctx.resources.palette.as_ref().status_to_color_bg(Status::Ok),
         );
 
         if nvalue > 0.0 {
@@ -167,7 +167,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
         };
 
         let text_opts_value = TextOptions {
-            color: ctx.resources.palette.as_ref().StatusToColorFont(value_status),
+            color: ctx.resources.palette.as_ref().status_to_color_font(value_status),
             size: base_radius / 1.55,
             align: Alignment::new().center().middle(),
             line_height: base_radius / 2.5,
@@ -317,17 +317,23 @@ impl Component<TextFieldData, ()> for TextField {
 
 // =========================== SPATIAL SITUATION INDICATOR ===========================
 /*
-struct SpatialSituationIndicator {
-    projection_zoom: f32,
-    o: UnitQuaternion<f32>,
+struct SpatialSituationIndicator{
+
 }
 
-trait DegreeTrigonometry {
+
+
+struct SpatialSituationIndicatorData {
+    projection_zoom: f32,
+    orientation: UnitQuaternion<f32>,
+}
+
+trait DegreeRadConversions {
     fn rad(&self) -> f32;
     fn deg(&self) -> f32;
 }
 
-impl DegreeTrigonometry for f32 {
+impl DegreeRadConversions for f32 {
     fn rad(&self) -> f32 {
         self / 180.0 * consts::PI
     }
@@ -498,8 +504,8 @@ impl SpatialSituationIndicator {
         self.draw_ffd(ctx, zone);
     }
 }
-*/
 
+*/
 pub fn register_basic_components(manager: &mut Manager) {
     let rt = Box::new(RotationalIndicator {});
     let textfield = Box::new(TextField{});

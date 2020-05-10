@@ -83,15 +83,15 @@ impl serde::Serialize for SerializableColor {
 
 
 pub trait Palette {
-    fn StatusToColor(&self, s: Status) -> Color;
-    fn StatusToColorFont(&self, s: Status) -> Color;
-    fn StatusToColorBg(&self, s: Status) -> Color;
+    fn status_to_color(&self, s: Status) -> Color;
+    fn status_to_color_font(&self, s: Status) -> Color;
+    fn status_to_color_bg(&self, s: Status) -> Color;
 }
 
 pub struct DarkPalette {}
 
 impl Palette for DarkPalette {
-    fn StatusToColor(&self, s: Status) -> Color {
+    fn status_to_color(&self, s: Status) -> Color {
         match s {
             Status::Ok => Color::from_rgba(0, 160, 0, 255),
             Status::Warning => Color::from_rgba(250, 120, 0, 255),
@@ -99,7 +99,7 @@ impl Palette for DarkPalette {
         }
     }
 
-    fn StatusToColorFont(&self, s: Status) -> Color {
+    fn status_to_color_font(&self, s: Status) -> Color {
         match s {
             Status::Ok => Color::from_rgba(255, 255, 255, 255),
             Status::Warning => Color::from_rgba(240, 180, 0, 255),
@@ -107,7 +107,7 @@ impl Palette for DarkPalette {
         }
     }
 
-    fn StatusToColorBg(&self, s: Status) -> Color {
+    fn status_to_color_bg(&self, s: Status) -> Color {
         match s {
             Status::Ok => Color::from_rgba(30, 30, 40, 255),
             Status::Warning => Color::from_rgba(30, 30, 40, 255),

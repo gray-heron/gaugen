@@ -30,7 +30,7 @@ impl gaugen::Component<SpacerInstance, ()> for Spacer {
     fn init_instance(
         &self,
         __ctx: &frontend::PresentationContext,
-        data: &SpacerInstance,
+        __data: &SpacerInstance,
         sizes: &[gaugen::ControlGeometry],
     ) -> gaugen::AfterInit<()>{
         gaugen::AfterInit{
@@ -41,12 +41,12 @@ impl gaugen::Component<SpacerInstance, ()> for Spacer {
 
     fn draw(
         &self,
-        ctx: &frontend::PresentationContext,
+        __ctx: &frontend::PresentationContext,
         zone: gaugen::DrawZone,
         children: &mut [
             Box<dyn FnMut(gaugen::DrawZone) + '_>
         ],
-        internal_data: &mut (),
+        __internal_data: &mut (),
         data: &SpacerInstance,
     ) {
         assert!(children.len() == 1);

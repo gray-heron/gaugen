@@ -234,24 +234,28 @@ impl Manager {
             move |ctx: &frontend::PresentationContext,
                   json: &serde_json::Value,
                   children: &[ControlGeometry]|
-                  -> Option<(WrappedDraw, ControlGeometry)>
-            {
+                  -> Option<(WrappedDraw, ControlGeometry)> {
+
                 let __stored_component2 = rc::Rc::clone(&__stored_component);
-                let maybe_data = match TComponentData::deserialize(json) {
-                    Ok(data) => Some(data),
-                    Err(_) => __stored_component.as_ref().get_default_data(),
+
+                let data = match TComponentData::deserialize(json) {
+                    Ok(data) => data,
+                    Err(_) => {
+                        let default_data = __stored_component.as_ref().get_default_data()?;
+                        match json.as_object() {
+                            Some(hooks) => Manager::join_hooks(&default_data, hooks),
+                            None => default_data
+                        }                        
+                    }
                 };
 
-                match maybe_data {
-                    Some(data) => Some(Manager::mk_init(
-                        ctx,
-                        __stored_component2,
-                        children,
-                        data,
-                        1.0,
-                    )),
-                    None => None,
-                }
+                Some(Manager::mk_init(
+                    ctx,
+                    __stored_component2,
+                    children,
+                    data,
+                    1.0,
+                ))
             },
         );
 

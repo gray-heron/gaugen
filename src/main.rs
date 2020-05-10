@@ -27,12 +27,6 @@ use serde_json::json;
 
 const INIT_WINDOW_SIZE: (u32, u32) = (800, 800);
 
-const ICON_SEARCH: &str = "\u{1F50D}";
-const ICON_CIRCLED_CROSS: &str = "\u{2716}";
-const ICON_CHEVRON_RIGHT: &str = "\u{E75E}";
-const ICON_CHECK: &str = "\u{2713}";
-const ICON_LOGIN: &str = "\u{E740}";
-const ICON_TRASH: &str = "\u{E729}";
 
 const GRAPH_HISTORY_COUNT: usize = 100;
 
