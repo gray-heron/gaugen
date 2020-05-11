@@ -143,7 +143,10 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             base_radius * 1.09,
             0.0,
             Color::from_rgba(160, 160, 160, 255),
-            ctx.resources.palette.as_ref().status_to_color_bg(Status::Ok),
+            ctx.resources
+                .palette
+                .as_ref()
+                .status_to_color_bg(Status::Ok),
         );
 
         if nvalue > 0.0 {
@@ -167,7 +170,11 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
         };
 
         let text_opts_value = TextOptions {
-            color: ctx.resources.palette.as_ref().status_to_color_font(value_status),
+            color: ctx
+                .resources
+                .palette
+                .as_ref()
+                .status_to_color_font(value_status),
             size: base_radius / 1.55,
             align: Alignment::new().center().middle(),
             line_height: base_radius / 2.5,
@@ -246,15 +253,11 @@ impl Component<TextFieldData, ()> for TextField {
     ) {
         ctx.frame.path(
             |path| {
-                path.rect(
-                    (zone.left(), zone.bottom()),
-                    (zone.size.x, zone.size.y)
-                );
+                path.rect((zone.left(), zone.bottom()), (zone.size.x, zone.size.y));
                 path.fill(data.back_color.color, Default::default());
             },
             Default::default(),
         );
-        
         let text_opts = TextOptions {
             color: data.front_color.color,
             size: zone.size.y * 1.0,
@@ -297,12 +300,12 @@ impl Component<TextFieldData, ()> for TextField {
     fn get_default_data(&self) -> Option<TextFieldData> {
         Some(TextFieldData {
             text: "<Placeholder>".to_string(),
-            front_color: SerializableColor{
-                color: Color::from_rgb(0x80, 0x80, 0x80)
+            front_color: SerializableColor {
+                color: Color::from_rgb(0x80, 0x80, 0x80),
             },
-            back_color: SerializableColor{
-                color: Color::from_rgb(0x0, 0x0, 0x60)
-            }
+            back_color: SerializableColor {
+                color: Color::from_rgb(0x0, 0x0, 0x60),
+            },
         })
     }
 
@@ -316,16 +319,30 @@ impl Component<TextFieldData, ()> for TextField {
 }
 
 // =========================== SPATIAL SITUATION INDICATOR ===========================
-/*
-struct SpatialSituationIndicator{
 
+struct SpatialSituationIndicator {}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct Orientation {
+    yaw: f32,
+    pitch: f32,
+    roll: f32,
 }
 
+impl Orientation {
+    fn identity() -> Orientation {
+        Orientation {
+            pitch: 0.0,
+            yaw: 0.0,
+            roll: 0.0,
+        }
+    }
+}
 
-
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct SpatialSituationIndicatorData {
     projection_zoom: f32,
-    orientation: UnitQuaternion<f32>,
+    orientation: Orientation,
 }
 
 trait DegreeRadConversions {
@@ -344,16 +361,21 @@ impl DegreeRadConversions for f32 {
 }
 
 impl SpatialSituationIndicator {
-    fn projection(&self, p: Vector2<f32>) -> Option<Vector2<f32>> {
+    fn projection(
+        &self,
+        p: Vector2<f32>,
+        o: &nalgebra::UnitQuaternion<f32>,
+        zoom: f32,
+        overhead: f32
+    ) -> Option<Vector2<f32>> {
         let v3 = UnitQuaternion::from_euler_angles(0.0, p.y.rad(), p.x.rad())
             * Vector3::new(1.0, 0.0, 0.0);
-        let out = self.o.inverse() * v3;
+        let out = o.inverse() * v3;
 
-        match out.x > 0.0 {
-            true => Some(Vector2::new(
-                out.y * self.projection_zoom,
-                out.z * self.projection_zoom,
-            )),
+        let mag = Vector2::new(out.y, out.z).magnitude();
+
+        match out.x > 0.0 && mag <= overhead * 0.9 / zoom {
+            true => Some(Vector2::new(out.y * zoom / 2.0, out.z * zoom / 2.0)),
             _ => None,
         }
     }
@@ -362,18 +384,26 @@ impl SpatialSituationIndicator {
         &self,
         frame: &Frame,
         zone: &DrawZone,
+        o: &nalgebra::UnitQuaternion<f32>,
+        zoom: f32,
         p1: Vector2<f32>,
         p2: Vector2<f32>,
         path_style: F,
     ) where
         F: Fn(&nanovg::Path),
     {
-        match (self.projection(p1), self.projection(p2)) {
+        match (self.projection(p1, o, zoom, 0.95), self.projection(p2, o, zoom, 0.95)) {
             (Some(tp1), Some(tp2)) => {
                 frame.path(
                     |path| {
-                        let from = (tp1.x * zone.width + zone.mx, tp1.y * zone.height + zone.my);
-                        let to = (tp2.x * zone.width + zone.mx, tp2.y * zone.height + zone.my);
+                        let from = (
+                            tp1.x * zone.size.x + zone.m.x,
+                            tp1.y * zone.size.y + zone.m.y,
+                        );
+                        let to = (
+                            tp2.x * zone.size.x + zone.m.x,
+                            tp2.y * zone.size.y + zone.m.y,
+                        );
                         path.move_to(from);
                         path.line_to(to);
                         path_style(&path);
@@ -389,23 +419,28 @@ impl SpatialSituationIndicator {
         &self,
         ctx: &PresentationContext,
         zone: &DrawZone,
+        o: &nalgebra::UnitQuaternion<f32>,
+        zoom: f32,
         t: String,
         p: Vector2<f32>,
     ) {
-        let linelen = zone.height / 2.0;
+        let linelen = zone.size.y / 2.5;
         let text_opts_value = TextOptions {
             color: Color::from_rgba(255, 255, 255, 255),
-            size: zone.height / 15.0,
+            size: zone.size.y / 15.0,
             align: Alignment::new().center().middle(),
-            line_height: zone.height / 15.0,
+            line_height: zone.size.y / 15.0,
             line_max_width: linelen,
             ..Default::default()
         };
 
-        match self.projection(p) {
+        match self.projection(p, o, zoom, 0.85) {
             Some(tp) => ctx.frame.text_box(
-                ctx.fonts.sans,
-                (tp.x * zone.width + zone.mx - linelen / 2.0, tp.y * zone.height + zone.my),
+                ctx.resources.font,
+                (
+                    tp.x * zone.size.x + zone.m.x - linelen / 2.0,
+                    tp.y * zone.size.y + zone.m.y,
+                ),
                 t,
                 text_opts_value,
             ),
@@ -413,21 +448,17 @@ impl SpatialSituationIndicator {
         }
     }
 
-    pub fn draw_ffd(
-        &self,
-        ctx: &PresentationContext,
-        zone: &DrawZone
-    ) {
-        let unit = zone.height / 20.0;
+    pub fn draw_ffd(&self, ctx: &PresentationContext, zone: &DrawZone) {
+        let unit = zone.size.y / 20.0;
         ctx.frame.path(
             |path| {
-                path.move_to((zone.mx - 2.0 * unit, zone.my));
-                path.line_to((zone.mx - 0.66 * unit, zone.my));
-                path.line_to((zone.mx, zone.my + unit));
-                path.line_to((zone.mx + 0.66 * unit, zone.my));
-                path.line_to((zone.mx + 2.0 * unit, zone.my));
+                path.move_to((zone.m.x - 2.0 * unit, zone.m.y));
+                path.line_to((zone.m.x - 0.66 * unit, zone.m.y));
+                path.line_to((zone.m.x, zone.m.y + unit));
+                path.line_to((zone.m.x + 0.66 * unit, zone.m.y));
+                path.line_to((zone.m.x + 2.0 * unit, zone.m.y));
 
-                path.circle((zone.mx, zone.my), 1.0);
+                path.circle((zone.m.x, zone.m.y), 1.0);
                 path.stroke(
                     Color::from_rgba(0xff, 0xff, 0x20, 0xa2),
                     StrokeOptions {
@@ -438,47 +469,115 @@ impl SpatialSituationIndicator {
             },
             Default::default(),
         );
+    }
+}
 
+impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator {
+    fn max_children(&self) -> Option<u32> {
+        Some(0)
     }
 
-    pub fn draw(
+    fn get_name(&self) -> &'static str {
+        "SpatialSituationIndicator"
+    }
+
+    fn get_default_data(&self) -> Option<SpatialSituationIndicatorData> {
+        Some(SpatialSituationIndicatorData {
+            projection_zoom: 1.5,
+            orientation: Orientation::identity(),
+        })
+    }
+    fn init_instance(
+        &self,
+        __ctx: &PresentationContext,
+        __data: &SpatialSituationIndicatorData,
+        __sizes: &[ControlGeometry],
+    ) -> AfterInit<()> {
+        AfterInit {
+            aspect: Some(1.0),
+            internal_data: (),
+        }
+    }
+
+    fn draw(
         &self,
         ctx: &PresentationContext,
-        zone: &DrawZone,
-        frame: &Frame,
+        zone: DrawZone,
+        __children: &mut [Box<dyn FnMut(DrawZone) + '_>],
+        __internal_data: &mut (),
+        public_data: &SpatialSituationIndicatorData,
     ) {
-        let orientation = self.o.euler_angles();
+        let orientation = Vector3::new(
+            public_data.orientation.roll,
+            public_data.orientation.pitch,
+            public_data.orientation.yaw,
+        );
+        let orientation_quat = UnitQuaternion::from_euler_angles(
+            public_data.orientation.roll,
+            public_data.orientation.pitch,
+            public_data.orientation.yaw,
+        );
+
+        ctx.frame.path(
+            |path| {
+                path.circle((zone.m.x, zone.m.y), 1.0 * zone.size.x / 2.0);
+                path.circle((zone.m.x, zone.m.y), 0.9 * zone.size.x / 2.0);
+                path.stroke(
+                    Color::from_rgba(0xa0, 0xa0, 0xa0, 0xa0),
+                    StrokeOptions {
+                        width: 3.0,
+                        ..Default::default()
+                    },
+                );
+            },
+            Default::default(),
+        );
 
         //draw vertical ladder
         for i in -22..22 {
             let h = (i * 5) as f32;
-            let p1 = Vector2::new(5.0 + orientation.2.deg(), h);
-            let p2 = Vector2::new(-5.0 + orientation.2.deg(), h);
-            let p3 = Vector2::new(6.3 + orientation.2.deg(), h);
+            let p1 = Vector2::new(5.0 + orientation.z.deg(), h);
+            let p2 = Vector2::new(-5.0 + orientation.z.deg(), h);
+            let p3 = Vector2::new(6.3 + orientation.z.deg(), h);
 
-            self.draw_line(frame, zone, p1, p2, |path| {
-                path.stroke(
-                    Color::from_rgba(0x80, 0x80, 0x80, 0xff),
-                    StrokeOptions {
-                        width: 1.5,
-                        ..Default::default()
-                    },
-                );
-            });
+            self.draw_line(
+                ctx.frame,
+                &zone,
+                &orientation_quat,
+                public_data.projection_zoom,
+                p1,
+                p2,
+                |path| {
+                    path.stroke(
+                        Color::from_rgba(0x80, 0x80, 0x80, 0xff),
+                        StrokeOptions {
+                            width: 1.5,
+                            ..Default::default()
+                        },
+                    );
+                },
+            );
 
             if i != 0 && i * 5 <= 90 {
-                self.draw_text(ctx, zone, (i * 5).to_string(), p3)
+                self.draw_text(
+                    ctx,
+                    &zone,
+                    &orientation_quat,
+                    public_data.projection_zoom,
+                    (i * 5).to_string(),
+                    p3,
+                )
             }
         }
 
-        let spacing = match orientation.1.deg().abs() > 60.0 {
+        let spacing = match orientation.y.deg().abs() > 60.0 {
             true => 30,
             _ => 10,
         };
 
-        let ladder_height = match orientation.1.deg().abs() < 75.0 {
-            true => orientation.1.deg(),
-            _ => orientation.1.deg().signum() * 75.0,
+        let ladder_height = match orientation.y.deg().abs() < 75.0 {
+            true => orientation.y.deg(),
+            _ => orientation.y.deg().signum() * 75.0,
         };
 
         //draw horizontal ladder
@@ -488,28 +587,44 @@ impl SpatialSituationIndicator {
             let p2 = Vector2::new(y, -3.0 + ladder_height);
             let p3 = Vector2::new(y, 0.0 + ladder_height);
 
-            self.draw_line(frame, zone, p1, p2, |path| {
-                path.stroke(
-                    Color::from_rgba(0x80, 0x80, 0x80, 0xff),
-                    StrokeOptions {
-                        width: 1.5,
-                        ..Default::default()
-                    },
-                );
-            });
+            self.draw_line(
+                ctx.frame,
+                &zone,
+                &orientation_quat,
+                public_data.projection_zoom,
+                p1,
+                p2,
+                |path| {
+                    path.stroke(
+                        Color::from_rgba(0x80, 0x80, 0x80, 0xff),
+                        StrokeOptions {
+                            width: 1.5,
+                            ..Default::default()
+                        },
+                    );
+                },
+            );
 
-            self.draw_text(ctx, zone, (i * spacing).to_string(), p3)
+            self.draw_text(
+                ctx,
+                &zone,
+                &orientation_quat,
+                public_data.projection_zoom,
+                (i * spacing).to_string(),
+                p3,
+            );
         }
 
-        self.draw_ffd(ctx, zone);
+        self.draw_ffd(ctx, &zone);
     }
 }
 
-*/
 pub fn register_basic_components(manager: &mut Manager) {
     let rt = Box::new(RotationalIndicator {});
-    let textfield = Box::new(TextField{});
+    let ssi = Box::new(SpatialSituationIndicator {});
+    let textfield = Box::new(TextField {});
 
     manager.register_component_type(rt);
     manager.register_component_type(textfield);
+    manager.register_component_type(ssi);
 }

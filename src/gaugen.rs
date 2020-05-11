@@ -52,9 +52,6 @@ impl DrawZone {
     }
 }
 
-//pub trait Deserializable {
-//    fn from_json(json_str: &serde_json::Value) -> Self;
-//}
 
 pub struct ControlGeometry {
     pub aspect: Option<f32>,
@@ -313,8 +310,6 @@ impl Manager {
             None => None,
         }
     }
-
-    //pub fn draw(&self, ctx: &frontend::PresentationContext, zone: DrawZone) {}
 
     pub fn new() -> Manager {
         Manager {
