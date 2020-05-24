@@ -18,10 +18,19 @@ pub struct SessionBuilder {
 
 pub struct Session<'a> {
     context: &'a nanovg::Context,
-    events_loop: glutin::EventsLoop,
-    gl_window: glutin::GlWindow,
     font: nanovg::Font<'a>,
     manager: gaugen::Manager,
+    default_screen: Screen
+}
+
+pub struct Screen {
+    gl_window: glutin::GlWindow,
+    events_loop: glutin::EventsLoop,
+}
+
+pub enum TargetScreen<'a> {
+    Custom(&'a mut Screen),
+    Default,
 }
 
 impl SessionBuilder {
@@ -36,9 +45,8 @@ impl SessionBuilder {
         self
     }
 
-    pub fn init<F: Fn(&mut Session)>(mut self, handler: F) {
-        let mut events_loop = glutin::EventsLoop::new();
-
+    fn make_screen() -> Screen {
+        let events_loop = glutin::EventsLoop::new();
         let window = glutin::WindowBuilder::new()
             .with_title("NanoVG UI")
             .with_dimensions(INIT_WINDOW_SIZE.0, INIT_WINDOW_SIZE.1);
@@ -48,9 +56,18 @@ impl SessionBuilder {
             .with_srgb(true);
         let gl_window = glutin::GlWindow::new(window, context, &events_loop).unwrap();
 
+        Screen {
+            gl_window: gl_window,
+            events_loop: events_loop,
+        }
+    }
+
+    pub fn init<F: Fn(&mut Session)>(self, handler: F) {
+        let default_screen = SessionBuilder::make_screen();
+
         unsafe {
-            gl_window.make_current().unwrap();
-            gl::load_with(|symbol| gl_window.get_proc_address(symbol) as *const _);
+            default_screen.gl_window.make_current().unwrap();
+            gl::load_with(|symbol| default_screen.gl_window.get_proc_address(symbol) as *const _);
         }
 
         let context = nanovg::ContextBuilder::new()
@@ -59,15 +76,14 @@ impl SessionBuilder {
             .expect("Initialization of NanoVG failed!");
 
         let font =
-        nanovg::Font::from_file(&context, "Roboto-Regular", "resources/Roboto-Regular.ttf")
-            .expect("Failed to load font 'Roboto-Regular.ttf'");
+            nanovg::Font::from_file(&context, "Roboto-Regular", "resources/Roboto-Regular.ttf")
+                .expect("Failed to load font 'Roboto-Regular.ttf'");
 
         let mut session = Session {
             context: &context,
-            events_loop: events_loop,
-            gl_window: gl_window,
             font: font,
             manager: self.manager,
+            default_screen: default_screen
         };
 
         handler(&mut session);
@@ -77,18 +93,28 @@ impl SessionBuilder {
 impl Session<'_> {
     pub fn draw(
         &mut self,
+        screen: TargetScreen,
         view: &mut gaugen::View,
         palette: &dyn frontend::Palette,
         hooks: &gaugen::Hooks,
-        dt: f32,
     ) -> bool {
+        let screen = match screen {
+            TargetScreen::Custom(screen) => screen,
+            _ => &mut self.default_screen,
+        };
+
+        unsafe {
+            screen.gl_window.make_current().unwrap();
+            gl::load_with(|symbol| screen.gl_window.get_proc_address(symbol) as *const _);
+        }
+
         let mut mx = 0.0f32;
         let mut my = 0.0f32;
         let mut quit = false;
 
-        let __window  = &mut self.gl_window;
+        let __window = &mut screen.gl_window;
 
-        self.events_loop.poll_events(|event| match event {
+        screen.events_loop.poll_events(|event| match event {
             glutin::Event::WindowEvent { event, .. } => match event {
                 glutin::WindowEvent::Closed => quit = true,
                 glutin::WindowEvent::Resized(w, h) => __window.resize(w, h),
@@ -105,7 +131,7 @@ impl Session<'_> {
             return false;
         }
 
-        let (width, height) = self.gl_window.get_inner_size().unwrap();
+        let (width, height) = screen.gl_window.get_inner_size().unwrap();
         let (width, height) = (width as i32, height as i32);
 
         unsafe {
@@ -114,51 +140,50 @@ impl Session<'_> {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT | gl::STENCIL_BUFFER_BIT);
         }
 
-        let (width, height) = (width as f32, height as f32);
+        let (width, height, dpi) = (width as f32, height as f32, screen.gl_window.hidpi_factor());
 
-        self.context
-            .frame((width, height), self.gl_window.hidpi_factor(), |frame| {
-                let mut ctx = frontend::PresentationContext {
-                    frame: &frame,
-                    time: dt,
-                    resources: &frontend::Resources {
-                        palette: palette,
-                        font: self.font,
-                    },
-                };
+        let __font = self.font; //so no "self" is not used in closure
 
-                let zone = gaugen::DrawZone::from_rect(
-                    Vector2::new(0.0, 0.0),
-                    Vector2::new(width, height),
-                );
+        self.context.frame((width, height), dpi, |frame| {
+            let mut ctx = frontend::PresentationContext {
+                frame: &frame,
+                time: 0.0, //fixme
+                resources: &frontend::Resources {
+                    palette: palette,
+                    font: __font,
+                },
+            };
 
-                match view.1.aspect {
-                    Some(aspect) => {
-                        let corrected_zone = gaugen::DrawZone {
-                            m: zone.m,
-                            size: match aspect > zone.aspect() {
-                                true => Vector2::new(zone.size.x, 1.0 / aspect * zone.size.x),
-                                false => Vector2::new(aspect * zone.size.y, zone.size.y),
-                            },
-                        };
-                        view.0.draw(&mut ctx, corrected_zone, hooks);
-                    }
-                    None => view.0.draw(&mut ctx, zone, hooks),
+            let zone =
+                gaugen::DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height));
+
+            match view.1.aspect {
+                Some(aspect) => {
+                    let corrected_zone = gaugen::DrawZone {
+                        m: zone.m,
+                        size: match aspect > zone.aspect() {
+                            true => Vector2::new(zone.size.x, 1.0 / aspect * zone.size.x),
+                            false => Vector2::new(aspect * zone.size.y, zone.size.y),
+                        },
+                    };
+                    view.0.draw(&mut ctx, corrected_zone, hooks);
                 }
-            });
+                None => view.0.draw(&mut ctx, zone, hooks),
+            }
+        });
 
-        self.gl_window.swap_buffers().unwrap();
+        screen.gl_window.swap_buffers().unwrap();
 
         true
     }
 
     pub fn new_view(&self, path_to_json: &str) -> Option<gaugen::View> {
         let mut ret = None; //fixme
-        let (width, height) = self.gl_window.get_inner_size().unwrap();
+        let (width, height) = self.default_screen.gl_window.get_inner_size().unwrap();
 
         self.context.frame(
             (width as f32, height as f32),
-            self.gl_window.hidpi_factor(),
+            self.default_screen.gl_window.hidpi_factor(),
             |frame| {
                 ret = Some(self.manager.make_screen(
                     &frontend::PresentationContext {
@@ -175,5 +200,9 @@ impl Session<'_> {
         );
 
         ret.unwrap()
+    }
+
+    pub fn new_screen(&mut self) -> Screen {
+        SessionBuilder::make_screen()
     }
 }
