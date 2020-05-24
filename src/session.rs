@@ -20,7 +20,7 @@ pub struct Session<'a> {
     context: &'a nanovg::Context,
     font: nanovg::Font<'a>,
     manager: gaugen::Manager,
-    default_screen: Screen
+    default_screen: Screen,
 }
 
 pub struct Screen {
@@ -28,7 +28,8 @@ pub struct Screen {
     events_loop: glutin::EventsLoop,
 }
 
-pub enum TargetScreen<'a> {
+// multi-screen capability waits for glutin support for multi-window with one context
+pub enum __TargetScreen<'a> {
     Custom(&'a mut Screen),
     Default,
 }
@@ -83,7 +84,7 @@ impl SessionBuilder {
             context: &context,
             font: font,
             manager: self.manager,
-            default_screen: default_screen
+            default_screen: default_screen,
         };
 
         handler(&mut session);
@@ -93,15 +94,19 @@ impl SessionBuilder {
 impl Session<'_> {
     pub fn draw(
         &mut self,
-        screen: TargetScreen,
+        //screen: TargetScreen,
         view: &mut gaugen::View,
         palette: &dyn frontend::Palette,
         hooks: &gaugen::Hooks,
     ) -> bool {
+        /*
+        see __TargetScreen
         let screen = match screen {
             TargetScreen::Custom(screen) => screen,
             _ => &mut self.default_screen,
         };
+        */
+        let screen = &mut self.default_screen;
 
         unsafe {
             screen.gl_window.make_current().unwrap();
@@ -202,7 +207,8 @@ impl Session<'_> {
         ret.unwrap()
     }
 
-    pub fn new_screen(&mut self) -> Screen {
+    //see __TargetSreen
+    fn __new_screen(&mut self) -> Screen {
         SessionBuilder::make_screen()
     }
 }

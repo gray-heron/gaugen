@@ -13,7 +13,6 @@ extern crate rand;
 
 use gilrs::{Axis, Button, Event, Gilrs};
 use nalgebra::Vector2;
-use session::TargetScreen::*;
 use session::*;
 
 use std::time::Instant;
@@ -46,21 +45,7 @@ fn main() {
         .register_components(geometry_components::components())
         .init(|session: &mut Session| {
             let mut view = session.new_view("screen.json").unwrap();
-            let mut second_screen = session.new_screen();
-            let mut ok = true;
 
-            while ok {
-                ok = session.draw(
-                    Default,
-                    &mut view,
-                    &frontend::DarkPalette {},
-                    &HashMap::new(),
-                ) && session.draw(
-                    Custom(&mut second_screen),
-                    &mut view,
-                    &frontend::DarkPalette {},
-                    &HashMap::new(),
-                )
-            }
+            while session.draw(&mut view, &frontend::DarkPalette {}, &HashMap::new()) {}
         });
 }
