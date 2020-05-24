@@ -126,7 +126,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
                 current_range_end,
                 base_radius * 1.13,
                 base_thickness,
-                ctx.resources.palette.as_ref().status_to_color(range_end.1),
+                ctx.resources.palette.status_to_color(range_end.1),
                 Color::from_rgba(0, 0, 0, 0),
             );
 
@@ -145,7 +145,6 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             Color::from_rgba(160, 160, 160, 255),
             ctx.resources
                 .palette
-                .as_ref()
                 .status_to_color_bg(Status::Ok),
         );
 
@@ -173,7 +172,6 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             color: ctx
                 .resources
                 .palette
-                .as_ref()
                 .status_to_color_font(value_status),
             size: base_radius / 1.55,
             align: Alignment::new().center().middle(),
@@ -392,7 +390,7 @@ impl SpatialSituationIndicator {
     ) where
         F: Fn(&nanovg::Path),
     {
-        match (self.projection(p1, o, zoom, 0.95), self.projection(p2, o, zoom, 0.95)) {
+        match (self.projection(p1, o, zoom, 0.97), self.projection(p2, o, zoom, 0.96)) {
             (Some(tp1), Some(tp2)) => {
                 frame.path(
                     |path| {
@@ -427,9 +425,9 @@ impl SpatialSituationIndicator {
         let linelen = zone.size.y / 2.5;
         let text_opts_value = TextOptions {
             color: Color::from_rgba(255, 255, 255, 255),
-            size: zone.size.y / 15.0,
+            size: zone.size.y / 20.0,
             align: Alignment::new().center().middle(),
-            line_height: zone.size.y / 15.0,
+            line_height: zone.size.y / 20.0,
             line_max_width: linelen,
             ..Default::default()
         };
@@ -536,9 +534,13 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
         //draw vertical ladder
         for i in -22..22 {
             let h = (i * 5) as f32;
-            let p1 = Vector2::new(5.0 + orientation.z.deg(), h);
-            let p2 = Vector2::new(-5.0 + orientation.z.deg(), h);
-            let p3 = Vector2::new(6.3 + orientation.z.deg(), h);
+            let width = match i == 0 {
+                true => 25.0,
+                false => 5.0
+            };
+            let p1 = Vector2::new(width + orientation.z.deg(), h);
+            let p2 = Vector2::new(-width + orientation.z.deg(), h);
+            let p3 = Vector2::new(7.0 + orientation.z.deg(), h);
 
             self.draw_line(
                 ctx.frame,
@@ -619,12 +621,14 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
     }
 }
 
-pub fn register_basic_components(manager: &mut Manager) {
-    let rt = Box::new(RotationalIndicator {});
-    let ssi = Box::new(SpatialSituationIndicator {});
-    let textfield = Box::new(TextField {});
-
-    manager.register_component_type(rt);
-    manager.register_component_type(textfield);
-    manager.register_component_type(ssi);
+pub fn components() -> impl Fn(&mut Manager) {
+    |manager: &mut Manager| {
+        let rt = Box::new(RotationalIndicator {});
+        let ssi = Box::new(SpatialSituationIndicator {});
+        let textfield = Box::new(TextField {});
+        
+        manager.register_component_type(rt);
+        manager.register_component_type(textfield);
+        manager.register_component_type(ssi);
+    }
 }

@@ -103,7 +103,8 @@ type WrappedDraw = Box<
         &serde_json::Map<String, serde_json::Value>,
     ),
 >;
-type Hooks = HashMap<String, serde_json::Map<String, serde_json::Value>>;
+pub type Hooks = HashMap<String, serde_json::Map<String, serde_json::Value>>;
+pub type View = (TreeComponent, ControlGeometry);
 
 pub struct TreeComponent {
     children: Vec<TreeComponent>,
@@ -264,7 +265,7 @@ impl Manager {
         &self,
         ctx: &frontend::PresentationContext,
         path_to_json: &str,
-    ) -> Option<(TreeComponent, ControlGeometry)> {
+    ) -> Option<View> {
         let json = fs::read_to_string(path_to_json).unwrap();
         let data: serde_json::Value = match serde_json::from_str(&json) {
             Ok(data) => data,
@@ -278,7 +279,7 @@ impl Manager {
         &self,
         ctx: &frontend::PresentationContext,
         v: &serde_json::Value,
-    ) -> Option<(TreeComponent, ControlGeometry)> {
+    ) -> Option<View> {
         let mk_init = &self.controls_types[v["type"].as_str()?];
 
         let mut children: Vec<TreeComponent> = Vec::new();

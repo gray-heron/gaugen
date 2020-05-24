@@ -117,7 +117,7 @@ impl Palette for DarkPalette {
 }
 
 pub struct Resources<'a> {
-    pub palette: Box<dyn Palette>,
+    pub palette: &'a dyn Palette,
     pub font: Font<'a>,
 }
 

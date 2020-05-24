@@ -1,5 +1,5 @@
-use crate::gaugen;
 use crate::frontend;
+use crate::gaugen;
 
 use nalgebra::Vector2;
 
@@ -13,10 +13,8 @@ pub struct SpacerInstance {
 pub struct Spacer {}
 
 impl gaugen::Component<SpacerInstance, ()> for Spacer {
-    fn get_default_data(&self) -> Option<SpacerInstance>{
-        Some(SpacerInstance{
-            spacing: 1.0
-        })
+    fn get_default_data(&self) -> Option<SpacerInstance> {
+        Some(SpacerInstance { spacing: 1.0 })
     }
 
     fn max_children(&self) -> Option<u32> {
@@ -32,10 +30,10 @@ impl gaugen::Component<SpacerInstance, ()> for Spacer {
         __ctx: &frontend::PresentationContext,
         __data: &SpacerInstance,
         sizes: &[gaugen::ControlGeometry],
-    ) -> gaugen::AfterInit<()>{
-        gaugen::AfterInit{
+    ) -> gaugen::AfterInit<()> {
+        gaugen::AfterInit {
             aspect: sizes[0].aspect,
-            internal_data: ()
+            internal_data: (),
         }
     }
 
@@ -43,9 +41,7 @@ impl gaugen::Component<SpacerInstance, ()> for Spacer {
         &self,
         __ctx: &frontend::PresentationContext,
         zone: gaugen::DrawZone,
-        children: &mut [
-            Box<dyn FnMut(gaugen::DrawZone) + '_>
-        ],
+        children: &mut [Box<dyn FnMut(gaugen::DrawZone) + '_>],
         __internal_data: &mut (),
         data: &SpacerInstance,
     ) {
@@ -63,45 +59,45 @@ impl gaugen::Component<SpacerInstance, ()> for Spacer {
 // =========================== VERTICAL SPLIT ===========================
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, std::cmp::PartialEq)]
-pub enum SplitDirection{
+pub enum SplitDirection {
     Horizontal,
-    Vertical
+    Vertical,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, std::cmp::PartialEq)]
-pub enum SplitMode{
+pub enum SplitMode {
     EqualArea,
-    EqualSide
+    EqualSide,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SplitInstance {
     spacing: f32,
     direction: SplitDirection,
-    mode: SplitMode
+    mode: SplitMode,
 }
 
 pub struct Split {
     spacer: Spacer,
 }
 
-struct SplitInternalData{
+struct SplitInternalData {
     sizes: Vec<Vector2<f32>>,
-    primary_width: f32
+    primary_width: f32,
 }
 
-impl SplitInstance{
+impl SplitInstance {
     // primary dimension = along split direction
-    fn pm<'a>(&self, vector: &'a mut Vector2<f32>) -> &'a mut f32{ 
-        if self.direction == SplitDirection::Horizontal{
+    fn pm<'a>(&self, vector: &'a mut Vector2<f32>) -> &'a mut f32 {
+        if self.direction == SplitDirection::Horizontal {
             &mut vector.x
         } else {
             &mut vector.y
         }
     }
 
-    fn p<'a>(&self, vector: &'a Vector2<f32>) -> &'a f32{ 
-        if self.direction == SplitDirection::Horizontal{
+    fn p<'a>(&self, vector: &'a Vector2<f32>) -> &'a f32 {
+        if self.direction == SplitDirection::Horizontal {
             &vector.x
         } else {
             &vector.y
@@ -109,24 +105,24 @@ impl SplitInstance{
     }
 
     // secondary dimension
-    fn sm<'a>(&self, vector: &'a mut Vector2<f32>) -> &'a mut f32{
-        if self.direction == SplitDirection::Horizontal{
+    fn sm<'a>(&self, vector: &'a mut Vector2<f32>) -> &'a mut f32 {
+        if self.direction == SplitDirection::Horizontal {
             &mut vector.y
         } else {
             &mut vector.x
         }
     }
 
-    fn s<'a>(&self, vector: &'a Vector2<f32>) -> &'a f32{
-        if self.direction == SplitDirection::Horizontal{
+    fn s<'a>(&self, vector: &'a Vector2<f32>) -> &'a f32 {
+        if self.direction == SplitDirection::Horizontal {
             &vector.y
         } else {
             &vector.x
         }
     }
 
-    fn aspect_to_primary_to_secondary(&self, aspect: f32) -> f32{
-        if self.direction == SplitDirection::Horizontal{
+    fn aspect_to_primary_to_secondary(&self, aspect: f32) -> f32 {
+        if self.direction == SplitDirection::Horizontal {
             aspect
         } else {
             1.0 / aspect
@@ -135,11 +131,11 @@ impl SplitInstance{
 }
 
 impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
-    fn get_default_data(&self) -> Option<SplitInstance>{
-        Some(SplitInstance{
+    fn get_default_data(&self) -> Option<SplitInstance> {
+        Some(SplitInstance {
             spacing: 0.9,
             direction: SplitDirection::Horizontal,
-            mode: SplitMode::EqualSide
+            mode: SplitMode::EqualSide,
         })
     }
 
@@ -148,8 +144,7 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
         __ctx: &frontend::PresentationContext,
         data: &SplitInstance,
         sizes: &[gaugen::ControlGeometry],
-    ) -> gaugen::AfterInit<SplitInternalData>{
-        
+    ) -> gaugen::AfterInit<SplitInternalData> {
         if data.mode == SplitMode::EqualSide {
             let mut internal_sizes: Vec<Vector2<f32>> = Vec::new();
             let mut total_size = 0.0;
@@ -157,7 +152,7 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
             for size in sizes {
                 let aspect = match size.aspect {
                     Some(aspect) => aspect,
-                    None => size.size_preference
+                    None => size.size_preference,
                 };
 
                 let relative_aspect = data.aspect_to_primary_to_secondary(aspect);
@@ -167,11 +162,11 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
             }
 
             gaugen::AfterInit {
-                aspect: Some(data.aspect_to_primary_to_secondary(total_size)), 
-                internal_data: SplitInternalData{
+                aspect: Some(data.aspect_to_primary_to_secondary(total_size)),
+                internal_data: SplitInternalData {
                     sizes: internal_sizes,
-                    primary_width: total_size
-                }
+                    primary_width: total_size,
+                },
             }
         } else {
             panic!();
@@ -179,7 +174,7 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
             gaugen::AfterInit{
                 aspect: sizes[0].aspect,
                 internal_data: SplitInternalData{
-                    sizes: 
+                    sizes:
                 }
             }
             */
@@ -198,9 +193,7 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
         &self,
         ctx: &frontend::PresentationContext,
         zone: gaugen::DrawZone,
-        children: &mut [
-            Box<dyn FnMut(gaugen::DrawZone) + '_>
-        ],
+        children: &mut [Box<dyn FnMut(gaugen::DrawZone) + '_>],
         internal_data: &mut SplitInternalData,
         data: &SplitInstance,
     ) {
@@ -217,14 +210,21 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
                 *data.pm(&mut bottom_left) = primary_cursor;
                 *data.sm(&mut bottom_left) = *data.s(&zone.bottom_left());
 
-                *data.pm(&mut top_right) = primary_cursor + internal_data.sizes[i].x * space_per_unit;
+                *data.pm(&mut top_right) =
+                    primary_cursor + internal_data.sizes[i].x * space_per_unit;
                 *data.sm(&mut top_right) = *data.s(&zone.top_right());
 
                 let zone = gaugen::DrawZone::from_rect(bottom_left, top_right);
 
-                self.spacer.draw(ctx, zone, &mut children[i..i+1], &mut (), &SpacerInstance{
-                    spacing: data.spacing
-                });
+                self.spacer.draw(
+                    ctx,
+                    zone,
+                    &mut children[i..i + 1],
+                    &mut (),
+                    &SpacerInstance {
+                        spacing: data.spacing,
+                    },
+                );
 
                 primary_cursor += internal_data.sizes[i].x * space_per_unit;
             }
@@ -234,7 +234,7 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
             gaugen::AfterInit{
                 aspect: sizes[0].aspect,
                 internal_data: SplitInternalData{
-                    sizes: 
+                    sizes:
                 }
             }
             */
@@ -244,10 +244,12 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
 
 // ===========================
 
-pub fn register_geometry_components(manager: &mut gaugen::Manager) {
-    let vs = Box::new(Split { spacer: Spacer{} });
-    let spacer = Box::new(Spacer{});
+pub fn components() -> impl Fn(&mut gaugen::Manager) {
+    |manager: &mut gaugen::Manager| {
+        let vs = Box::new(Split { spacer: Spacer {} });
+        let spacer = Box::new(Spacer {});
 
-    manager.register_component_type(vs);
-    manager.register_component_type(spacer);
+        manager.register_component_type(vs);
+        manager.register_component_type(spacer);
+    }
 }
