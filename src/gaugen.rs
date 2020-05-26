@@ -10,6 +10,7 @@ use std::rc;
 
 //RunTime Parametric Structures
 
+#[derive(Copy, Clone)]
 pub struct DrawZone {
     pub m: Vector2<f32>,
     pub size: Vector2<f32>,
@@ -32,26 +33,40 @@ impl DrawZone {
         self.m.y - self.size.y / 2.0
     }
 
-    pub fn bottom_left(&self) -> Vector2<f32> {
+    pub fn top_left(&self) -> Vector2<f32> {
         Vector2::new(self.left(), self.bottom())
     }
 
-    pub fn top_right(&self) -> Vector2<f32> {
+    pub fn bottom_right(&self) -> Vector2<f32> {
         Vector2::new(self.right(), self.top())
     }
 
-    pub fn from_rect(bottom_left: Vector2<f32>, top_right: Vector2<f32>) -> DrawZone {
+    pub fn from_rect(top_left: Vector2<f32>, bottom_right: Vector2<f32>) -> DrawZone {
         DrawZone {
-            m: (bottom_left + top_right) / 2.0,
-            size: top_right - bottom_left,
+            m: (top_left + bottom_right) / 2.0,
+            size: bottom_right - top_left,
         }
     }
 
     pub fn aspect(&self) -> f32 {
         self.size.x / self.size.y
     }
-}
 
+    pub fn constraint_to_aspect(&self, aspect: Option<f32>) -> DrawZone {
+        match aspect {
+            Some(aspect) => {
+                DrawZone {
+                    m: self.m,
+                    size: match aspect > self.aspect() {
+                        true => Vector2::new(self.size.x, 1.0 / aspect * self.size.x),
+                        false => Vector2::new(aspect * self.size.y, self.size.y),
+                    },
+                }
+            },
+            None => *self
+        }
+    }
+}
 
 pub struct ControlGeometry {
     pub aspect: Option<f32>,
@@ -67,7 +82,7 @@ pub trait Component<TComponentPublicInstanceData, TComponentInternalInstanceData
 where
     TComponentPublicInstanceData: serde::de::DeserializeOwned,
 {
-    fn max_children(&self) -> Option<u32>;
+    fn max_children(&self) -> Option<u32>; // None = no restrictions
     fn get_name(&self) -> &'static str;
     fn get_default_data(&self) -> Option<TComponentPublicInstanceData>;
     fn init_instance(
@@ -233,7 +248,6 @@ impl Manager {
                   json: &serde_json::Value,
                   children: &[ControlGeometry]|
                   -> Option<(WrappedDraw, ControlGeometry)> {
-
                 let __stored_component2 = rc::Rc::clone(&__stored_component);
 
                 let data = match TComponentData::deserialize(json) {
@@ -242,8 +256,8 @@ impl Manager {
                         let default_data = __stored_component.as_ref().get_default_data()?;
                         match json.as_object() {
                             Some(hooks) => Manager::join_hooks(&default_data, hooks),
-                            None => default_data
-                        }                        
+                            None => default_data,
+                        }
                     }
                 };
 

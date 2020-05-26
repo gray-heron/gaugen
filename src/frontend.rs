@@ -1,6 +1,7 @@
 use nanovg::{Color, Font};
 use std::fmt;
 
+
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Copy, Clone)]
 pub enum Status {
     Ok,
@@ -81,11 +82,11 @@ impl serde::Serialize for SerializableColor {
     }
 }
 
-
 pub trait Palette {
     fn status_to_color(&self, s: Status) -> Color;
     fn status_to_color_font(&self, s: Status) -> Color;
     fn status_to_color_bg(&self, s: Status) -> Color;
+    fn soft_front_color(&self) -> Color;
 }
 
 pub struct DarkPalette {}
@@ -113,6 +114,10 @@ impl Palette for DarkPalette {
             Status::Warning => Color::from_rgba(30, 30, 40, 255),
             Status::Error => Color::from_rgba(200 / 2, 0, 0, 255),
         }
+    }
+
+    fn soft_front_color(&self) -> Color {
+        Color::from_rgba(128, 128, 128, 255)
     }
 }
 

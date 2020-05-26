@@ -1,11 +1,10 @@
 {
     "type": "Split",
-    
-            "data": {
-                "spacing": 0.95,
-                "direction": "Horizontal",
-                "mode": "EqualSide"
-            },
+    "data": {
+        "spacing": 0.95,
+        "direction": "Horizontal",
+        "mode": "EqualSide"
+    },
     "children": [
         {
             "type": "Split",
@@ -62,19 +61,24 @@
                     ]
                 },
                 {
-                    "type": "Split",
+                    "type": "GroupingBox",
+                    "data": {
+                        "title": "Engines"
+                    },
                     "children": [
                         {
-                            "type": "RotationalIndicator"
-                        },
-                        {
-                            "type": "RotationalIndicator"
-                        },
-                        {
-                            "type": "RotationalIndicator"
-                        },
-                        {
-                            "type": "RotationalIndicator"
+                            "type": "Split",
+                            "children": [
+                                {
+                                    "type": "RotationalIndicator"
+                                },
+                                {
+                                    "type": "RotationalIndicator"
+                                },
+                                {
+                                    "type": "RotationalIndicator"
+                                }
+                            ]
                         }
                     ]
                 }

@@ -43,9 +43,16 @@ fn main() {
     SessionBuilder::new()
         .register_components(basic_components::components())
         .register_components(geometry_components::components())
-        .init(|session: &mut Session| {
-            let mut view = session.new_view("screen.json").unwrap();
+        .init(|session: &mut Session| loop {
+            let mut view = session.new_view("screen.json");
 
-            while session.draw(&mut view, &frontend::DarkPalette {}, &HashMap::new()) {}
+            match view {
+                Some(ref mut view) => {
+                    if !session.draw(view, &frontend::DarkPalette {}, &HashMap::new()) {
+                        break;
+                    }
+                }
+                _ => {}
+            }
         });
 }

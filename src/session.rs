@@ -160,21 +160,10 @@ impl Session<'_> {
             };
 
             let zone =
-                gaugen::DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height));
+                gaugen::DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height))
+                    .constraint_to_aspect(view.1.aspect);
 
-            match view.1.aspect {
-                Some(aspect) => {
-                    let corrected_zone = gaugen::DrawZone {
-                        m: zone.m,
-                        size: match aspect > zone.aspect() {
-                            true => Vector2::new(zone.size.x, 1.0 / aspect * zone.size.x),
-                            false => Vector2::new(aspect * zone.size.y, zone.size.y),
-                        },
-                    };
-                    view.0.draw(&mut ctx, corrected_zone, hooks);
-                }
-                None => view.0.draw(&mut ctx, zone, hooks),
-            }
+            view.0.draw(&mut ctx, zone, hooks);
         });
 
         screen.gl_window.swap_buffers().unwrap();

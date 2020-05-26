@@ -56,7 +56,7 @@ impl gaugen::Component<SpacerInstance, ()> for Spacer {
     }
 }
 
-// =========================== VERTICAL SPLIT ===========================
+// =========================== SPLIT ===========================
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, std::cmp::PartialEq)]
 pub enum SplitDirection {
@@ -201,20 +201,20 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
 
         if data.mode == SplitMode::EqualSide {
             let space_per_unit = data.p(&zone.size) / internal_data.primary_width;
-            let mut primary_cursor = *data.p(&zone.bottom_left());
+            let mut primary_cursor = *data.p(&zone.top_left());
 
             for i in 0..children.len() {
-                let mut bottom_left = Vector2::new(0.0, 0.0);
-                let mut top_right = Vector2::new(0.0, 0.0);
+                let mut top_left = Vector2::new(0.0, 0.0);
+                let mut bottom_right = Vector2::new(0.0, 0.0);
 
-                *data.pm(&mut bottom_left) = primary_cursor;
-                *data.sm(&mut bottom_left) = *data.s(&zone.bottom_left());
+                *data.pm(&mut top_left) = primary_cursor;
+                *data.sm(&mut top_left) = *data.s(&zone.top_left());
 
-                *data.pm(&mut top_right) =
+                *data.pm(&mut bottom_right) =
                     primary_cursor + internal_data.sizes[i].x * space_per_unit;
-                *data.sm(&mut top_right) = *data.s(&zone.top_right());
+                *data.sm(&mut bottom_right) = *data.s(&zone.bottom_right());
 
-                let zone = gaugen::DrawZone::from_rect(bottom_left, top_right);
+                let zone = gaugen::DrawZone::from_rect(top_left, bottom_right);
 
                 self.spacer.draw(
                     ctx,
@@ -244,12 +244,165 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
 
 // ===========================
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub enum GroupingBoxTitleSize {
+    RelativeToHeight(f32),
+    Absolute(f32),
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct GroupingBoxData {
+    pub spacing: f32,
+    pub title_size: GroupingBoxTitleSize,
+    pub title: String,
+}
+
+pub struct GroupingBox {}
+
+struct GroupingBoxInternalData {
+    child_aspect: Option<f32>,
+}
+
+impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox {
+    // primary dimension = along split direction
+    fn max_children(&self) -> Option<u32> {
+        Some(1)
+    }
+
+    fn get_name(&self) -> &'static str {
+        "GroupingBox"
+    }
+
+    fn get_default_data(&self) -> Option<GroupingBoxData> {
+        Some(GroupingBoxData {
+            spacing: 0.9,
+            title_size: GroupingBoxTitleSize::Absolute(50.0),
+            title: "GroupingBox".to_string(),
+        })
+    }
+
+    fn init_instance(
+        &self,
+        __ctx: &frontend::PresentationContext,
+        data: &GroupingBoxData,
+        sizes: &[gaugen::ControlGeometry],
+    ) -> gaugen::AfterInit<GroupingBoxInternalData> {
+        assert_eq!(sizes.len(), 1);
+
+        let aspect = match sizes[0].aspect {
+            Some(aspect) => match data.title_size {
+                GroupingBoxTitleSize::RelativeToHeight(height) => {
+                    Some(aspect / (1.0 + height))
+                }
+                _ => Some(aspect),
+            },
+            None => None,
+        };
+
+        gaugen::AfterInit {
+            aspect: aspect,
+            internal_data: GroupingBoxInternalData {
+                child_aspect: sizes[0].aspect,
+            },
+        }
+    }
+
+    fn draw(
+        &self,
+        ctx: &frontend::PresentationContext,
+        zone: gaugen::DrawZone,
+        children: &mut [Box<dyn FnMut(gaugen::DrawZone) + '_>],
+        internal_data: &mut GroupingBoxInternalData,
+        public_data: &GroupingBoxData,
+    ) {
+        let title_height = match public_data.title_size {
+            GroupingBoxTitleSize::RelativeToHeight(height) => zone.size.y * height,
+            GroupingBoxTitleSize::Absolute(height) => height,
+        };
+
+        let child_height = zone.size.y - title_height;
+
+        let child_zone = gaugen::DrawZone::from_rect(
+            zone.top_left() + Vector2::new(0.0, title_height),
+            zone.bottom_right(),
+        );
+
+        let text_zone = gaugen::DrawZone::from_rect(
+            zone.top_left(),
+            zone.bottom_right() - Vector2::new(0.0, child_height),
+        );
+
+        let text_zone = gaugen::DrawZone {
+            m: text_zone.m,
+            size: text_zone.size * public_data.spacing,
+        };
+
+        let child_zone = gaugen::DrawZone {
+            m: child_zone.m,
+            size: child_zone.size * public_data.spacing,
+        };
+
+        let child_zone = child_zone.constraint_to_aspect(internal_data.child_aspect);
+
+        let text_opts = nanovg::TextOptions {
+            color: ctx.resources.palette.soft_front_color(),
+            size: text_zone.size.y * 1.0,
+            align: nanovg::Alignment::new().center().middle(),
+            line_height: text_zone.size.y * 1.0,
+            line_max_width: text_zone.size.x * 1.0,
+            ..Default::default()
+        };
+
+        ctx.frame.text_box(
+            ctx.resources.font,
+            (text_zone.left(), text_zone.m.y),
+            public_data.title.as_str(),
+            text_opts,
+        );
+
+        let bounds = ctx.frame.text_box_bounds(
+            ctx.resources.font,
+            (0.0, 0.0),
+            public_data.title.as_str(),
+            text_opts,
+        );
+
+        let w = (bounds.max_x - text_zone.size.x / 2.0) * public_data.spacing * 1.2;
+
+        ctx.frame.path(
+            |path| {
+                path.move_to((text_zone.m.x - w, text_zone.m.y));
+                path.line_to((zone.left(), text_zone.m.y));
+                path.line_to((zone.left(), zone.top()));
+                path.line_to((zone.right(), zone.top()));
+                path.line_to((zone.right(), text_zone.m.y));
+                path.line_to((text_zone.m.x + w, text_zone.m.y));
+
+                path.stroke(
+                    ctx.resources.palette.soft_front_color(),
+                    nanovg::StrokeOptions {
+                        width: 3.0,
+                        ..Default::default()
+                    },
+                );
+            },
+            Default::default(),
+        );
+
+        children[0].as_mut()(child_zone);
+    }
+}
+
+// =========================== UTILS ===========================
+
 pub fn components() -> impl Fn(&mut gaugen::Manager) {
     |manager: &mut gaugen::Manager| {
         let vs = Box::new(Split { spacer: Spacer {} });
         let spacer = Box::new(Spacer {});
+        let grouping_box = Box::new(GroupingBox {});
 
         manager.register_component_type(vs);
         manager.register_component_type(spacer);
+        manager.register_component_type(grouping_box);
     }
 }
