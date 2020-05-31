@@ -2,6 +2,7 @@ use crate::frontend;
 use crate::gaugen;
 
 use nalgebra::Vector2;
+use math::round;
 
 // =========================== SPACER ===========================
 
@@ -276,7 +277,7 @@ impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox
     fn get_default_data(&self) -> Option<GroupingBoxData> {
         Some(GroupingBoxData {
             spacing: 0.9,
-            title_size: GroupingBoxTitleSize::Absolute(50.0),
+            title_size: GroupingBoxTitleSize::RelativeToHeight(0.2),
             title: "GroupingBox".to_string(),
         })
     }
@@ -291,9 +292,7 @@ impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox
 
         let aspect = match sizes[0].aspect {
             Some(aspect) => match data.title_size {
-                GroupingBoxTitleSize::RelativeToHeight(height) => {
-                    Some(aspect / (1.0 + height))
-                }
+                GroupingBoxTitleSize::RelativeToHeight(height) => Some(aspect / (1.0 + height)),
                 _ => Some(aspect),
             },
             None => None,
@@ -334,7 +333,7 @@ impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox
 
         let text_zone = gaugen::DrawZone {
             m: text_zone.m,
-            size: text_zone.size * public_data.spacing,
+            size: text_zone.size ,
         };
 
         let child_zone = gaugen::DrawZone {
@@ -367,7 +366,7 @@ impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox
             text_opts,
         );
 
-        let w = (bounds.max_x - text_zone.size.x / 2.0) * public_data.spacing * 1.2;
+        let w = (bounds.max_x - text_zone.size.x / 2.0) * 1.2;
 
         ctx.frame.path(
             |path| {
@@ -393,16 +392,150 @@ impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox
     }
 }
 
+// ===========================
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub enum GridDimensions {
+    Fixed((i32, i32)), //tuple for better serialization
+    Auto,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct GridData {
+    pub spacing: f32,
+    pub dimensions: GridDimensions,
+}
+
+pub struct Grid {}
+
+struct GridInternalData {
+    aspects: Vec<Option<f32>>,
+}
+
+impl gaugen::Component<GridData, GridInternalData> for Grid {
+    fn max_children(&self) -> Option<u32> {
+        None
+    }
+
+    fn get_name(&self) -> &'static str {
+        "Grid"
+    }
+
+    fn get_default_data(&self) -> Option<GridData> {
+        Some(GridData {
+            spacing: 0.9,
+            dimensions: GridDimensions::Auto,
+        })
+    }
+
+    fn init_instance(
+        &self,
+        __ctx: &frontend::PresentationContext,
+        data: &GridData,
+        children_sizes: &[gaugen::ControlGeometry],
+    ) -> gaugen::AfterInit<GridInternalData> {
+        let mut total_aspect = 0.0;
+        let mut children_with_aspect = 0;
+
+        for size in children_sizes {
+            match size.aspect {
+                Some(aspect) => {
+                    total_aspect += aspect;
+                    children_with_aspect += 1;
+                }
+                _ => {}
+            }
+        }
+
+        let dims = match data.dimensions {
+            GridDimensions::Fixed((w, h)) => (w, h),
+            GridDimensions::Auto => (
+                round::ceil((children_sizes.len() as f64).sqrt(), 0) as i32,
+                round::ceil((children_sizes.len() as f64).sqrt(), 0) as i32,
+            ),
+        };
+
+        let mean_aspect = match children_sizes.len() {
+            0 => None,
+            _ => Some(total_aspect / (children_with_aspect as f32)),
+        };
+
+        let mut children_aspects: Vec<Option<f32>> = Vec::new();
+        for size in children_sizes {
+            children_aspects.push(size.aspect);
+        }
+
+        gaugen::AfterInit {
+            aspect: match mean_aspect {
+                Some(aspect) => Some(aspect * (dims.0 as f32) / (dims.1 as f32)),
+                None => None,
+            },
+            internal_data: GridInternalData {
+                aspects: children_aspects,
+            },
+        }
+    }
+
+    fn draw(
+        &self,
+        __ctx: &frontend::PresentationContext,
+        zone: gaugen::DrawZone,
+        children: &mut [Box<dyn FnMut(gaugen::DrawZone) + '_>],
+        internal_data: &mut GridInternalData,
+        public_data: &GridData,
+    ) {
+        let dims = match public_data.dimensions {
+            GridDimensions::Fixed((w, h)) => (w, h),
+            GridDimensions::Auto => (
+                round::ceil((children.len() as f64).sqrt(), 0) as i32,
+                round::ceil((children.len() as f64).sqrt(), 0) as i32,
+            ),
+        };
+
+        let (xstep, ystep) = (zone.size.x / (dims.0 as f32), zone.size.y / (dims.1 as f32));
+        let mut child_id = 0;
+
+        for y in 0..dims.1 {
+            for x in 0..dims.0 {
+                if child_id < children.len() {
+                    let childzone = gaugen::DrawZone::from_rect(
+                        zone.top_left() + Vector2::new((x as f32) * xstep, (y as f32) * ystep),
+                        zone.top_left()
+                            + Vector2::new(((x + 1) as f32) * xstep, ((y + 1) as f32) * ystep),
+                    );
+
+                    let absolute_spacing = childzone.size.norm() * (1.0 - public_data.spacing);
+
+                    let childzone = gaugen::DrawZone {
+                        m: childzone.m,
+                        size: childzone.size - Vector2::new(absolute_spacing, absolute_spacing),
+                    };
+
+                    let childzone = childzone.constraint_to_aspect(internal_data.aspects[child_id]);
+
+                    children[child_id].as_mut()(childzone);
+
+                    child_id += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+}
+
 // =========================== UTILS ===========================
 
 pub fn components() -> impl Fn(&mut gaugen::Manager) {
     |manager: &mut gaugen::Manager| {
-        let vs = Box::new(Split { spacer: Spacer {} });
+        let split = Box::new(Split { spacer: Spacer {} });
         let spacer = Box::new(Spacer {});
         let grouping_box = Box::new(GroupingBox {});
+        let grid = Box::new(Grid{});
 
-        manager.register_component_type(vs);
+        manager.register_component_type(split);
         manager.register_component_type(spacer);
         manager.register_component_type(grouping_box);
+        manager.register_component_type(grid);
     }
 }

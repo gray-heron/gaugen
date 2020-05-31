@@ -2,93 +2,152 @@
     "type": "Split",
     "data": {
         "spacing": 0.95,
-        "direction": "Horizontal",
+        "direction": "Vertical",
         "mode": "EqualSide"
     },
     "children": [
         {
             "type": "Split",
             "data": {
-                "spacing": 1.0,
-                "direction": "Vertical",
+                "spacing": 0.95,
+                "direction": "Horizontal",
                 "mode": "EqualSide"
             },
             "children": [
                 {
-                    "type": "TextField",
-                    "name": "textf",
+                    "type": "Split",
                     "data": {
-                        "text": "Hello, my name is",
-                        "front_color": "ffffffff",
-                        "back_color": "ff100080"
-                    }
-                },
-                {
-                    "type": "Spacer",
-                    "data": {
-                        "spacing": 1.0
+                        "spacing": 1.0,
+                        "direction": "Vertical",
+                        "mode": "EqualSide"
                     },
                     "children": [
                         {
-                            "type": "RotationalIndicator",
-                            "name": "volt",
+                            "type": "TextField",
+                            "name": "textf",
                             "data": {
-                                "precision": 2,
-                                "unit": "V",
-                                "caption": "VOLTAGE",
-                                "value": 6.2,
-                                "value_min": 4.0,
-                                "value_ranges": [
-                                    [
-                                        6.0,
-                                        "Error"
-                                    ],
-                                    [
-                                        6.6,
-                                        "Warning"
-                                    ],
-                                    [
-                                        9.8,
-                                        "Ok"
-                                    ],
-                                    [
-                                        11.0,
-                                        "Error"
-                                    ]
-                                ]
+                                "text": "Hello, my name is",
+                                "front_color": "ffffffff",
+                                "back_color": "ff100080"
                             }
-                        }
-                    ]
-                },
-                {
-                    "type": "GroupingBox",
-                    "data": {
-                        "title": "Engines"
-                    },
-                    "children": [
+                        },
                         {
-                            "type": "Split",
+                            "type": "Spacer",
+                            "data": {
+                                "spacing": 1.0
+                            },
                             "children": [
                                 {
-                                    "type": "RotationalIndicator"
-                                },
+                                    "type": "RotationalIndicator",
+                                    "name": "volt",
+                                    "data": {
+                                        "precision": 2,
+                                        "unit": "V",
+                                        "caption": "VOLTAGE",
+                                        "value": 6.2,
+                                        "value_min": 4.0,
+                                        "value_ranges": [
+                                            [
+                                                6.0,
+                                                "Error"
+                                            ],
+                                            [
+                                                6.6,
+                                                "Warning"
+                                            ],
+                                            [
+                                                9.8,
+                                                "Ok"
+                                            ],
+                                            [
+                                                11.0,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "type": "GroupingBox",
+                            "data": {
+                                "title": "Engines"
+                            },
+                            "children": [
                                 {
-                                    "type": "RotationalIndicator"
-                                },
-                                {
-                                    "type": "RotationalIndicator"
+                                    "type": "Split",
+                                    "children": [
+                                        {
+                                            "type": "RotationalIndicator"
+                                        },
+                                        {
+                                            "type": "RotationalIndicator"
+                                        },
+                                        {
+                                            "type": "RotationalIndicator"
+                                        }
+                                    ]
                                 }
                             ]
                         }
                     ]
+                },
+                {
+                    "type": "SpatialSituationIndicator",
+                    "data": {
+                        "projection_zoom": 2.0
+                    }
                 }
             ]
         },
         {
-            "type": "SpatialSituationIndicator",
+            "type": "GroupingBox",
             "data": {
-                "projection_zoom": 2.0
-            }
+                "spacing": 0.85
+            },
+            "children": [
+                {
+                    "type": "Grid",
+                    "data": {
+                        "spacing": 0.99
+                    },
+                    "children": [
+                        {
+                            "type": "TextField",
+                            "data": {
+                                "text": "R-Flow"
+                            }
+                        },
+                        {
+                            "type": "TextField",
+                            "data": {
+                                "text": "L-Flow"
+                            }
+                        },
+                        {
+                            "type": "TextField"
+                        },
+                        {
+                            "type": "TextField"
+                        },
+                        {
+                            "type": "TextField"
+                        },
+                        {
+                            "type": "TextField"
+                        },
+                        {
+                            "type": "TextField"
+                        },
+                        {
+                            "type": "TextField"
+                        },
+                        {
+                            "type": "TextField"
+                        }
+                    ]
+                }
+            ]
         }
     ]
 }
