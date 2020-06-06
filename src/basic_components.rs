@@ -12,7 +12,7 @@ use std::f32::consts;
 
 const CGA: f32 = consts::PI / 8.0;
 
-fn FormatFloat(v: f32, decimals: u32) -> String {
+fn format_float(v: f32, decimals: u32) -> String {
     let mut ret: String = "".to_string();
     let mut countdown = false;
     let mut counter = decimals;
@@ -27,12 +27,16 @@ fn FormatFloat(v: f32, decimals: u32) -> String {
             counter -= 1;
         } else if c == '.' {
             countdown = true;
+
+            if decimals == 0 {
+                break;
+            }
         }
 
         ret.push(c);
     }
 
-    if counter == decimals {
+    if counter == decimals && decimals != 0 {
         ret.push('.');
     }
 
@@ -74,7 +78,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
 
         let normalize = |value: f32| {
             if value < data.value_min {
-                0.0
+                0.001
             } else if value > value_max {
                 1.0
             } else {
@@ -130,7 +134,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
                 Color::from_rgba(0, 0, 0, 0),
             );
 
-            if nvalue > last_range_end && nvalue <= current_range_end {
+            if nvalue >= last_range_end && nvalue < current_range_end {
                 value_status = range_end.1;
             }
 
@@ -192,7 +196,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
         ctx.frame.text_box(
             ctx.resources.font,
             (zone.left(), zone.m.y - base_radius / 10.0 - ymo),
-            FormatFloat(data.value, data.precision) + &data.unit,
+            format_float(data.value, data.precision) + &data.unit,
             text_opts_value,
         );
     }
@@ -321,26 +325,11 @@ impl Component<TextFieldData, ()> for TextField {
 struct SpatialSituationIndicator {}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-struct Orientation {
-    yaw: f32,
-    pitch: f32,
-    roll: f32,
-}
-
-impl Orientation {
-    fn identity() -> Orientation {
-        Orientation {
-            pitch: 0.0,
-            yaw: 0.0,
-            roll: 0.0,
-        }
-    }
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct SpatialSituationIndicatorData {
     projection_zoom: f32,
-    orientation: Orientation,
+    yaw: f32,
+    pitch: f32,
+    roll: f32
 }
 
 trait DegreeRadConversions {
@@ -482,7 +471,9 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
     fn get_default_data(&self) -> Option<SpatialSituationIndicatorData> {
         Some(SpatialSituationIndicatorData {
             projection_zoom: 1.5,
-            orientation: Orientation::identity(),
+            yaw: 0.0,
+            pitch: 0.0,
+            roll: 0.0
         })
     }
     fn init_instance(
@@ -506,14 +497,15 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
         public_data: &SpatialSituationIndicatorData,
     ) {
         let orientation = Vector3::new(
-            public_data.orientation.roll,
-            public_data.orientation.pitch,
-            public_data.orientation.yaw,
+            public_data.roll,
+            public_data.pitch,
+            public_data.yaw,
         );
+
         let orientation_quat = UnitQuaternion::from_euler_angles(
-            public_data.orientation.roll,
-            public_data.orientation.pitch,
-            public_data.orientation.yaw,
+            public_data.roll,
+            public_data.pitch,
+            public_data.yaw,
         );
 
         ctx.frame.path(
@@ -535,7 +527,7 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
         for i in -22..22 {
             let h = (i * 5) as f32;
             let width = match i == 0 {
-                true => 25.0,
+                true => 25.0 * (public_data.pitch * 3.0).cos(),
                 false => 5.0
             };
             let p1 = Vector2::new(width + orientation.z.deg(), h);
@@ -551,7 +543,7 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
                 p2,
                 |path| {
                     path.stroke(
-                        Color::from_rgba(0x80, 0x80, 0x80, 0xff),
+                        Color::from_rgba(0x50, 0x50, 0x50, 0xff),
                         StrokeOptions {
                             width: 1.5,
                             ..Default::default()
@@ -585,9 +577,9 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
         //draw horizontal ladder
         for i in 0 / spacing..360 / spacing {
             let y = (i * spacing) as f32;
-            let p1 = Vector2::new(y, 3.0 + ladder_height);
-            let p2 = Vector2::new(y, -3.0 + ladder_height);
-            let p3 = Vector2::new(y, 0.0 + ladder_height);
+            let p1 = Vector2::new(y, 2.0 + ladder_height);
+            let p2 = Vector2::new(y, -2.0 + ladder_height);
+            let p3 = Vector2::new(y, -4.0 + ladder_height);
 
             self.draw_line(
                 ctx.frame,
@@ -598,7 +590,7 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
                 p2,
                 |path| {
                     path.stroke(
-                        Color::from_rgba(0x80, 0x80, 0x80, 0xff),
+                        Color::from_rgba(0x50, 0x50, 0x50, 0xff),
                         StrokeOptions {
                             width: 1.5,
                             ..Default::default()

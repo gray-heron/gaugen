@@ -9,8 +9,16 @@ extern crate rand;
 
 use glutin::GlContext;
 use nalgebra::Vector2;
+use std::time::Instant;
 
 const INIT_WINDOW_SIZE: (u32, u32) = (800, 800);
+
+
+fn get_elapsed_time(instant: &Instant) -> f32 {
+    let elapsed = instant.elapsed();
+    let elapsed = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9;
+    elapsed as f32
+}
 
 pub struct SessionBuilder {
     manager: gaugen::Manager,
@@ -21,11 +29,12 @@ pub struct Session<'a> {
     font: nanovg::Font<'a>,
     manager: gaugen::Manager,
     default_screen: Screen,
+    start_time: Instant
 }
 
 pub struct Screen {
     gl_window: glutin::GlWindow,
-    events_loop: glutin::EventsLoop,
+    events_loop: glutin::EventsLoop
 }
 
 // multi-screen capability waits for glutin support for multi-window with one context
@@ -85,6 +94,7 @@ impl SessionBuilder {
             font: font,
             manager: self.manager,
             default_screen: default_screen,
+            start_time: Instant::now()
         };
 
         handler(&mut session);
@@ -148,11 +158,12 @@ impl Session<'_> {
         let (width, height, dpi) = (width as f32, height as f32, screen.gl_window.hidpi_factor());
 
         let __font = self.font; //so no "self" is not used in closure
+        let __time = &self.start_time;
 
         self.context.frame((width, height), dpi, |frame| {
             let mut ctx = frontend::PresentationContext {
                 frame: &frame,
-                time: 0.0, //fixme
+                time: get_elapsed_time(__time),
                 resources: &frontend::Resources {
                     palette: palette,
                     font: __font,

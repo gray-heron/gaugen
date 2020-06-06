@@ -366,7 +366,10 @@ impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox
             text_opts,
         );
 
-        let w = (bounds.max_x - text_zone.size.x / 2.0) * 1.2;
+        let w = match public_data.title == "" {
+            false => (bounds.max_x - text_zone.size.x / 2.0) * 1.2,
+            true => 0.0
+        } ;
 
         ctx.frame.path(
             |path| {
