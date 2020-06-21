@@ -58,7 +58,7 @@ impl SessionBuilder {
     fn make_screen() -> Screen {
         let events_loop = glutin::EventsLoop::new();
         let window = glutin::WindowBuilder::new()
-            .with_title("NanoVG UI")
+            .with_title("Gaugen Demo")
             .with_dimensions(INIT_WINDOW_SIZE.0, INIT_WINDOW_SIZE.1);
         let context = glutin::ContextBuilder::new()
             .with_vsync(false)

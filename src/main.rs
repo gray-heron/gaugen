@@ -108,61 +108,69 @@ fn main() {
     SessionBuilder::new()
         .register_components(basic_components::components())
         .register_components(geometry_components::components())
-        .init(|session: &mut Session| loop { 
+        .init(|session: &mut Session| {
             let mut view = session.new_view("screen.json");
-
-            let telemetry = listen(&socket);
-            let mut hooks = HashMap::new();
-
-            add_trivial_hook(&mut hooks, "speed", "value", telemetry[&(3, 0)]);
-            add_trivial_hook(&mut hooks, "flaps", "value", telemetry[&(13, 4)] * 40.0);
-            add_trivial_hook(&mut hooks, "alt", "value", telemetry[&(20, 5)] / 1000.0);
-
-            add_trivial_hook(&mut hooks, "gear", "front_color",
-                match telemetry[&(67, 0)] < 0.01 {
-                    true =>  "ff808080".to_string(),
-                    false => "ff000000".to_string(),
-                }
-            );
-
-            add_trivial_hook(&mut hooks, "gear", "back_color",
-                match (telemetry[&(67, 0)] < 0.01, telemetry[&(67, 0)] > 0.99) {
-                    (true, false) => "ff000000".to_string(),
-                    (false, true) => "ff008f00".to_string(),
-                    _ => "ff8f0000".to_string(),
-                }
-            );
             
-            add_trivial_hook(
-                &mut hooks,
-                "ssi",
-                "pitch",
-                telemetry[&(17, 0)] / 180.0 * 3.14,
-            );
-            add_trivial_hook(
-                &mut hooks,
-                "ssi",
-                "roll",
-                telemetry[&(17, 1)] / 180.0 * 3.14,
-            );
-            add_trivial_hook(&mut hooks, "ssi", "yaw", telemetry[&(17, 2)] / 180.0 * 3.14);
+            loop {
+                let telemetry = listen(&socket);
+                let mut hooks = HashMap::new();
 
-            add_trivial_hook(&mut hooks, "e11", "value", telemetry[&(34, 0)] / 1000.0);
-            add_trivial_hook(&mut hooks, "e21", "value", telemetry[&(34, 1)] / 1000.0);
-            add_trivial_hook(&mut hooks, "e12", "value", telemetry[&(46, 0)]);
-            add_trivial_hook(&mut hooks, "e22", "value", telemetry[&(46, 1)]);
-            add_trivial_hook(&mut hooks, "e13", "value", telemetry[&(37, 0)]);
-            add_trivial_hook(&mut hooks, "e23", "value", telemetry[&(37, 1)]);
-            add_trivial_hook(&mut hooks, "e14", "value", telemetry[&(45, 0)]);
-            add_trivial_hook(&mut hooks, "e24", "value", telemetry[&(45, 1)]);
+                add_trivial_hook(&mut hooks, "speed", "value", telemetry[&(3, 0)]);
+                add_trivial_hook(&mut hooks, "flaps", "value", telemetry[&(13, 4)] * 40.0);
+                add_trivial_hook(&mut hooks, "alt", "value", telemetry[&(20, 5)] / 1000.0);
 
-            match view {
-                Some(ref mut view) => {
-                    if !session.draw(view, &frontend::DarkPalette {}, &hooks) {
-                        break;
+                add_trivial_hook(
+                    &mut hooks,
+                    "gear",
+                    "front_color",
+                    match telemetry[&(67, 0)] < 0.01 {
+                        true => "ff808080".to_string(),
+                        false => "ff000000".to_string(),
+                    },
+                );
+
+                add_trivial_hook(
+                    &mut hooks,
+                    "gear",
+                    "back_color",
+                    match (telemetry[&(67, 0)] < 0.01, telemetry[&(67, 0)] > 0.99) {
+                        (true, false) => "ff000000".to_string(),
+                        (false, true) => "ff008f00".to_string(),
+                        _ => "ff8f0000".to_string(),
+                    },
+                );
+
+                add_trivial_hook(
+                    &mut hooks,
+                    "ssi",
+                    "pitch",
+                    telemetry[&(17, 0)] / 180.0 * 3.14,
+                );
+                add_trivial_hook(
+                    &mut hooks,
+                    "ssi",
+                    "roll",
+                    telemetry[&(17, 1)] / 180.0 * 3.14,
+                );
+                add_trivial_hook(&mut hooks, "ssi", "yaw", telemetry[&(17, 2)] / 180.0 * 3.14);
+
+                add_trivial_hook(&mut hooks, "e11", "value", telemetry[&(34, 0)] / 1000.0);
+                add_trivial_hook(&mut hooks, "e21", "value", telemetry[&(34, 1)] / 1000.0);
+                add_trivial_hook(&mut hooks, "e12", "value", telemetry[&(46, 0)]);
+                add_trivial_hook(&mut hooks, "e22", "value", telemetry[&(46, 1)]);
+                add_trivial_hook(&mut hooks, "e13", "value", telemetry[&(37, 0)]);
+                add_trivial_hook(&mut hooks, "e23", "value", telemetry[&(37, 1)]);
+                add_trivial_hook(&mut hooks, "e14", "value", telemetry[&(45, 0)]);
+                add_trivial_hook(&mut hooks, "e24", "value", telemetry[&(45, 1)]);
+
+                match view {
+                    Some(ref mut view) => {
+                        if !session.draw(view, &frontend::DarkPalette {}, &hooks) {
+                            break;
+                        }
                     }
-                }
-                _ => {}
-            };
+                    _ => {}
+                };
+            }
         });
 }
