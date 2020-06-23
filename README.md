@@ -4,7 +4,7 @@
 Gaugen is a tool for composing simple, vector-based UIs with [rust](https://www.rust-lang.org/) and [nanovg-rs](https://github.com/KevinKelley/nanovg-rs). This current version is very preliminary.
 
 
->![alt text](demo.gif )
+>![alt text](resources/demo.gif )
 >
 >X-Plane 11 integration example.
 
@@ -63,7 +63,7 @@ At the moment the only way to compose UI is trough JSON file, for example:
 ```
 will produce:
 
-![alt text](basic_ui.png)
+![alt text](resources/basic_ui.png)
 
 The components are organised into tree hierarchy. Each is configured either by component's default data (i.e. this rotational indicator being set _50_), by data supplied in the json (i.e. _GroupingBox_) or mix of both, json having of course priority over default data (i.e. "Hello World" _TextField_).
 
@@ -103,11 +103,11 @@ loop {
 
 Now this will produce:
 
-![alt text](hooks.png)
+![alt text](resources/hooks.png)
 
 ## Creating new / custom components
 
-![alt text](arch.png)
+![alt text](resources/arch.png)
 
 Each component type must provide three data models:
 ```rust
