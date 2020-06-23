@@ -1,8 +1,11 @@
 [package]
-name = "nanovg-rs"
+name = "gaugen"
 version = "0.1.0"
 authors = ["cezar"]
 edition = "2018"
+
+[lib]
+name = "gaugen"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,7 +13,6 @@ edition = "2018"
 gl = "0.6.0"
 glutin = "0.13.0"
 rand = "0.4"
-gilrs = "0.7.2"
 nalgebra = "0.18"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

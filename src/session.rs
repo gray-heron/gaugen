@@ -1,5 +1,5 @@
 use crate::frontend;
-use crate::gaugen;
+use crate::*;
 
 extern crate gl;
 extern crate glutin;
@@ -21,13 +21,13 @@ fn get_elapsed_time(instant: &Instant) -> f32 {
 }
 
 pub struct SessionBuilder {
-    manager: gaugen::Manager,
+    manager: Manager,
 }
 
 pub struct Session<'a> {
     context: &'a nanovg::Context,
     font: nanovg::Font<'a>,
-    manager: gaugen::Manager,
+    manager: Manager,
     default_screen: Screen,
     start_time: Instant
 }
@@ -46,11 +46,11 @@ pub enum __TargetScreen<'a> {
 impl SessionBuilder {
     pub fn new() -> SessionBuilder {
         SessionBuilder {
-            manager: gaugen::Manager::new(),
+            manager: Manager::new(),
         }
     }
 
-    pub fn register_components<F: Fn(&mut gaugen::Manager)>(mut self, components: F) -> Self {
+    pub fn register_components<F: Fn(&mut Manager)>(mut self, components: F) -> Self {
         components(&mut self.manager);
         self
     }
@@ -105,9 +105,9 @@ impl Session<'_> {
     pub fn draw(
         &mut self,
         //screen: TargetScreen,
-        view: &mut gaugen::View,
+        view: &mut View,
         palette: &dyn frontend::Palette,
-        hooks: &gaugen::Hooks,
+        hooks: &Hooks,
     ) -> bool {
         /*
         see __TargetScreen
@@ -171,7 +171,7 @@ impl Session<'_> {
             };
 
             let zone =
-                gaugen::DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height))
+                DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height))
                     .constraint_to_aspect(view.1.aspect);
 
             view.0.draw(&mut ctx, zone, hooks);
@@ -182,7 +182,7 @@ impl Session<'_> {
         true
     }
 
-    pub fn new_view(&self, path_to_json: &str) -> Option<gaugen::View> {
+    pub fn new_view(&self, path_to_json: &str) -> Option<View> {
         let mut ret = None; //fixme
         let (width, height) = self.default_screen.gl_window.get_inner_size().unwrap();
 

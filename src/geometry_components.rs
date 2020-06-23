@@ -1,5 +1,5 @@
 use crate::frontend;
-use crate::gaugen;
+use crate::*;
 
 use nalgebra::Vector2;
 use math::round;
@@ -13,7 +13,7 @@ pub struct SpacerInstance {
 
 pub struct Spacer {}
 
-impl gaugen::Component<SpacerInstance, ()> for Spacer {
+impl Component<SpacerInstance, ()> for Spacer {
     fn get_default_data(&self) -> Option<SpacerInstance> {
         Some(SpacerInstance { spacing: 1.0 })
     }
@@ -30,9 +30,9 @@ impl gaugen::Component<SpacerInstance, ()> for Spacer {
         &self,
         __ctx: &frontend::PresentationContext,
         __data: &SpacerInstance,
-        sizes: &[gaugen::ControlGeometry],
-    ) -> gaugen::AfterInit<()> {
-        gaugen::AfterInit {
+        sizes: &[ControlGeometry],
+    ) -> AfterInit<()> {
+        AfterInit {
             aspect: sizes[0].aspect,
             internal_data: (),
         }
@@ -41,14 +41,14 @@ impl gaugen::Component<SpacerInstance, ()> for Spacer {
     fn draw(
         &self,
         __ctx: &frontend::PresentationContext,
-        zone: gaugen::DrawZone,
-        children: &mut [Box<dyn FnMut(gaugen::DrawZone) + '_>],
+        zone: DrawZone,
+        children: &mut [Box<dyn FnMut(DrawZone) + '_>],
         __internal_data: &mut (),
         data: &SpacerInstance,
     ) {
         assert!(children.len() == 1);
 
-        let childzone = gaugen::DrawZone {
+        let childzone = DrawZone {
             m: zone.m,
             size: zone.size * data.spacing,
         };
@@ -131,7 +131,7 @@ impl SplitInstance {
     }
 }
 
-impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
+impl Component<SplitInstance, SplitInternalData> for Split {
     fn get_default_data(&self) -> Option<SplitInstance> {
         Some(SplitInstance {
             spacing: 0.9,
@@ -144,8 +144,8 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
         &self,
         __ctx: &frontend::PresentationContext,
         data: &SplitInstance,
-        sizes: &[gaugen::ControlGeometry],
-    ) -> gaugen::AfterInit<SplitInternalData> {
+        sizes: &[ControlGeometry],
+    ) -> AfterInit<SplitInternalData> {
         if data.mode == SplitMode::EqualSide {
             let mut internal_sizes: Vec<Vector2<f32>> = Vec::new();
             let mut total_size = 0.0;
@@ -162,7 +162,7 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
                 total_size += relative_aspect;
             }
 
-            gaugen::AfterInit {
+            AfterInit {
                 aspect: Some(data.aspect_to_primary_to_secondary(total_size)),
                 internal_data: SplitInternalData {
                     sizes: internal_sizes,
@@ -172,7 +172,7 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
         } else {
             panic!();
             /*
-            gaugen::AfterInit{
+            AfterInit{
                 aspect: sizes[0].aspect,
                 internal_data: SplitInternalData{
                     sizes:
@@ -193,8 +193,8 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
     fn draw(
         &self,
         ctx: &frontend::PresentationContext,
-        zone: gaugen::DrawZone,
-        children: &mut [Box<dyn FnMut(gaugen::DrawZone) + '_>],
+        zone: DrawZone,
+        children: &mut [Box<dyn FnMut(DrawZone) + '_>],
         internal_data: &mut SplitInternalData,
         data: &SplitInstance,
     ) {
@@ -215,7 +215,7 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
                     primary_cursor + internal_data.sizes[i].x * space_per_unit;
                 *data.sm(&mut bottom_right) = *data.s(&zone.bottom_right());
 
-                let zone = gaugen::DrawZone::from_rect(top_left, bottom_right);
+                let zone = DrawZone::from_rect(top_left, bottom_right);
 
                 self.spacer.draw(
                     ctx,
@@ -232,7 +232,7 @@ impl gaugen::Component<SplitInstance, SplitInternalData> for Split {
         } else {
             panic!();
             /*
-            gaugen::AfterInit{
+            AfterInit{
                 aspect: sizes[0].aspect,
                 internal_data: SplitInternalData{
                     sizes:
@@ -264,7 +264,7 @@ struct GroupingBoxInternalData {
     child_aspect: Option<f32>,
 }
 
-impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox {
+impl Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox {
     // primary dimension = along split direction
     fn max_children(&self) -> Option<u32> {
         Some(1)
@@ -286,8 +286,8 @@ impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox
         &self,
         __ctx: &frontend::PresentationContext,
         data: &GroupingBoxData,
-        sizes: &[gaugen::ControlGeometry],
-    ) -> gaugen::AfterInit<GroupingBoxInternalData> {
+        sizes: &[ControlGeometry],
+    ) -> AfterInit<GroupingBoxInternalData> {
         assert_eq!(sizes.len(), 1);
 
         let aspect = match sizes[0].aspect {
@@ -298,7 +298,7 @@ impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox
             None => None,
         };
 
-        gaugen::AfterInit {
+        AfterInit {
             aspect: aspect,
             internal_data: GroupingBoxInternalData {
                 child_aspect: sizes[0].aspect,
@@ -309,8 +309,8 @@ impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox
     fn draw(
         &self,
         ctx: &frontend::PresentationContext,
-        zone: gaugen::DrawZone,
-        children: &mut [Box<dyn FnMut(gaugen::DrawZone) + '_>],
+        zone: DrawZone,
+        children: &mut [Box<dyn FnMut(DrawZone) + '_>],
         internal_data: &mut GroupingBoxInternalData,
         public_data: &GroupingBoxData,
     ) {
@@ -321,22 +321,22 @@ impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox
 
         let child_height = zone.size.y - title_height;
 
-        let child_zone = gaugen::DrawZone::from_rect(
+        let child_zone = DrawZone::from_rect(
             zone.top_left() + Vector2::new(0.0, title_height),
             zone.bottom_right(),
         );
 
-        let text_zone = gaugen::DrawZone::from_rect(
+        let text_zone = DrawZone::from_rect(
             zone.top_left(),
             zone.bottom_right() - Vector2::new(0.0, child_height),
         );
 
-        let text_zone = gaugen::DrawZone {
+        let text_zone = DrawZone {
             m: text_zone.m,
             size: text_zone.size ,
         };
 
-        let child_zone = gaugen::DrawZone {
+        let child_zone = DrawZone {
             m: child_zone.m,
             size: child_zone.size * public_data.spacing,
         };
@@ -415,7 +415,7 @@ struct GridInternalData {
     aspects: Vec<Option<f32>>,
 }
 
-impl gaugen::Component<GridData, GridInternalData> for Grid {
+impl Component<GridData, GridInternalData> for Grid {
     fn max_children(&self) -> Option<u32> {
         None
     }
@@ -435,8 +435,8 @@ impl gaugen::Component<GridData, GridInternalData> for Grid {
         &self,
         __ctx: &frontend::PresentationContext,
         data: &GridData,
-        children_sizes: &[gaugen::ControlGeometry],
-    ) -> gaugen::AfterInit<GridInternalData> {
+        children_sizes: &[ControlGeometry],
+    ) -> AfterInit<GridInternalData> {
         let mut total_aspect = 0.0;
         let mut children_with_aspect = 0;
 
@@ -468,7 +468,7 @@ impl gaugen::Component<GridData, GridInternalData> for Grid {
             children_aspects.push(size.aspect);
         }
 
-        gaugen::AfterInit {
+        AfterInit {
             aspect: match mean_aspect {
                 Some(aspect) => Some(aspect * (dims.0 as f32) / (dims.1 as f32)),
                 None => None,
@@ -482,8 +482,8 @@ impl gaugen::Component<GridData, GridInternalData> for Grid {
     fn draw(
         &self,
         __ctx: &frontend::PresentationContext,
-        zone: gaugen::DrawZone,
-        children: &mut [Box<dyn FnMut(gaugen::DrawZone) + '_>],
+        zone: DrawZone,
+        children: &mut [Box<dyn FnMut(DrawZone) + '_>],
         internal_data: &mut GridInternalData,
         public_data: &GridData,
     ) {
@@ -501,7 +501,7 @@ impl gaugen::Component<GridData, GridInternalData> for Grid {
         for y in 0..dims.1 {
             for x in 0..dims.0 {
                 if child_id < children.len() {
-                    let childzone = gaugen::DrawZone::from_rect(
+                    let childzone = DrawZone::from_rect(
                         zone.top_left() + Vector2::new((x as f32) * xstep, (y as f32) * ystep),
                         zone.top_left()
                             + Vector2::new(((x + 1) as f32) * xstep, ((y + 1) as f32) * ystep),
@@ -509,7 +509,7 @@ impl gaugen::Component<GridData, GridInternalData> for Grid {
 
                     let absolute_spacing = childzone.size.norm() * (1.0 - public_data.spacing);
 
-                    let childzone = gaugen::DrawZone {
+                    let childzone = DrawZone {
                         m: childzone.m,
                         size: childzone.size - Vector2::new(absolute_spacing, absolute_spacing),
                     };
@@ -529,8 +529,8 @@ impl gaugen::Component<GridData, GridInternalData> for Grid {
 
 // =========================== UTILS ===========================
 
-pub fn components() -> impl Fn(&mut gaugen::Manager) {
-    |manager: &mut gaugen::Manager| {
+pub fn components() -> impl Fn(&mut Manager) {
+    |manager: &mut Manager| {
         let split = Box::new(Split { spacer: Spacer {} });
         let spacer = Box::new(Spacer {});
         let grouping_box = Box::new(GroupingBox {});

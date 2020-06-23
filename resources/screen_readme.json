@@ -1,0 +1,34 @@
+{
+    "type": "GroupingBox",
+    "data": {
+        "spacing": 0.95,
+        "title": "Demo group",
+        "title_size": {
+            "RelativeToHeight": 0.1
+        }
+    },
+    "children": [
+        {
+            "type": "Split",
+            "data": {
+                "direction": "Vertical"
+            },
+            "children": [
+                {
+                    "type": "TextField",
+                    "name": "my_textfield",
+                    "data": {
+                        "text": "Hello world!"
+                    }
+                },
+                {
+                    "type": "TextField"
+                },
+                {
+                    "type": "RotationalIndicator",
+                    "name": "my_indicator"
+                }
+            ]
+        }
+    ]
+}

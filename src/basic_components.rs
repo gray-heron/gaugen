@@ -1,11 +1,8 @@
 use crate::frontend::*;
-use crate::gaugen::*;
+use crate::*;
+use nalgebra as na;
 
-use nanovg::{
-    Alignment, Clip, Color, Context, Direction, Font, Frame, Gradient, Image, ImagePattern,
-    Intersect, LineCap, LineJoin, PathOptions, Scissor, Solidity, StrokeOptions, TextOptions,
-    Transform, Winding,
-};
+use nanovg::{Alignment, Color, Direction, Frame, StrokeOptions, TextOptions, Winding};
 
 use na::{UnitQuaternion, Vector2, Vector3};
 use std::f32::consts;
@@ -147,9 +144,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             base_radius * 1.09,
             0.0,
             Color::from_rgba(160, 160, 160, 255),
-            ctx.resources
-                .palette
-                .status_to_color_bg(Status::Ok),
+            ctx.resources.palette.status_to_color_bg(Status::Ok),
         );
 
         if nvalue > 0.0 {
@@ -173,10 +168,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
         };
 
         let text_opts_value = TextOptions {
-            color: ctx
-                .resources
-                .palette
-                .status_to_color_font(value_status),
+            color: ctx.resources.palette.status_to_color_font(value_status),
             size: base_radius / 1.55,
             align: Alignment::new().center().middle(),
             line_height: base_radius / 2.5,
@@ -329,7 +321,7 @@ struct SpatialSituationIndicatorData {
     projection_zoom: f32,
     yaw: f32,
     pitch: f32,
-    roll: f32
+    roll: f32,
 }
 
 trait DegreeRadConversions {
@@ -353,7 +345,7 @@ impl SpatialSituationIndicator {
         p: Vector2<f32>,
         o: &nalgebra::UnitQuaternion<f32>,
         zoom: f32,
-        overhead: f32
+        overhead: f32,
     ) -> Option<Vector2<f32>> {
         let v3 = UnitQuaternion::from_euler_angles(0.0, p.y.rad(), p.x.rad())
             * Vector3::new(1.0, 0.0, 0.0);
@@ -379,7 +371,10 @@ impl SpatialSituationIndicator {
     ) where
         F: Fn(&nanovg::Path),
     {
-        match (self.projection(p1, o, zoom, 0.97), self.projection(p2, o, zoom, 0.96)) {
+        match (
+            self.projection(p1, o, zoom, 0.97),
+            self.projection(p2, o, zoom, 0.96),
+        ) {
             (Some(tp1), Some(tp2)) => {
                 frame.path(
                     |path| {
@@ -473,7 +468,7 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
             projection_zoom: 1.5,
             yaw: 0.0,
             pitch: 0.0,
-            roll: 0.0
+            roll: 0.0,
         })
     }
     fn init_instance(
@@ -496,17 +491,10 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
         __internal_data: &mut (),
         public_data: &SpatialSituationIndicatorData,
     ) {
-        let orientation = Vector3::new(
-            public_data.roll,
-            public_data.pitch,
-            public_data.yaw,
-        );
+        let orientation = Vector3::new(public_data.roll, public_data.pitch, public_data.yaw);
 
-        let orientation_quat = UnitQuaternion::from_euler_angles(
-            public_data.roll,
-            public_data.pitch,
-            public_data.yaw,
-        );
+        let orientation_quat =
+            UnitQuaternion::from_euler_angles(public_data.roll, public_data.pitch, public_data.yaw);
 
         ctx.frame.path(
             |path| {
@@ -528,7 +516,7 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
             let h = (i * 5) as f32;
             let width = match i == 0 {
                 true => 25.0 * (public_data.pitch * 3.0).cos(),
-                false => 5.0
+                false => 5.0,
             };
             let p1 = Vector2::new(width + orientation.z.deg(), h);
             let p2 = Vector2::new(-width + orientation.z.deg(), h);
@@ -618,7 +606,6 @@ pub fn components() -> impl Fn(&mut Manager) {
         let rt = Box::new(RotationalIndicator {});
         let ssi = Box::new(SpatialSituationIndicator {});
         let textfield = Box::new(TextField {});
-        
         manager.register_component_type(rt);
         manager.register_component_type(textfield);
         manager.register_component_type(ssi);
