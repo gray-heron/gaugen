@@ -127,7 +127,7 @@ Once data model is provided, necessary component's logic must be defined, in par
 impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox {
     fn init_instance(
         &self,
-        __ctx: &frontend::PresentationContext,
+        __ctx: &mut frontend::PresentationContext,
         data: &GroupingBoxData,
         children_sizes: &[gaugen::ControlGeometry],
     ) -> gaugen::AfterInit<GroupingBoxInternalData> {
@@ -141,7 +141,7 @@ And of course a drawing action, so gaugen can actually order drawing of particul
 impl gaugen::Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox {
     fn draw(
         &self,
-        ctx: &frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         zone: gaugen::DrawZone,
         children: &mut [Box<dyn FnMut(gaugen::DrawZone) + '_>],
         internal_data: &mut GroupingBoxInternalData,

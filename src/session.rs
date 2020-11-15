@@ -160,21 +160,22 @@ impl Session<'_> {
         let __font = self.font; //so no "self" is not used in closure
         let __time = &self.start_time;
 
-        self.context.frame((width, height), dpi, |frame| {
+        self.context.frame((width, height), dpi, |mut frame| {
+            let res = frontend::Resources {
+                palette: palette,
+                font: __font,
+            };
+
             let mut ctx = frontend::PresentationContext {
-                frame: &frame,
+                frame: frame,
                 time: get_elapsed_time(__time),
-                resources: &frontend::Resources {
-                    palette: palette,
-                    font: __font,
-                },
+                resources: res
             };
 
             let zone =
-                DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height))
-                    .constraint_to_aspect(view.1.aspect);
+                DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height));
 
-            view.0.draw(&mut ctx, zone, hooks);
+            view.draw(&mut ctx, zone, hooks);
         });
 
         screen.gl_window.swap_buffers().unwrap();
@@ -184,21 +185,26 @@ impl Session<'_> {
 
     pub fn new_view(&self, path_to_json: &str) -> Option<View> {
         let mut ret = None; //fixme
+
         let (width, height) = self.default_screen.gl_window.get_inner_size().unwrap();
 
         self.context.frame(
             (width as f32, height as f32),
             self.default_screen.gl_window.hidpi_factor(),
-            |frame| {
+            |mut frame| {
+                let res = frontend::Resources {
+                    palette: &frontend::DarkPalette {},
+                    font: self.font,
+                };
+
+                let mut ctx = frontend::PresentationContext {
+                    frame: frame,
+                    time: 0.0,
+                    resources: res
+                };
+
                 ret = Some(self.manager.make_screen(
-                    &frontend::PresentationContext {
-                        frame: &frame,
-                        time: 0.0,
-                        resources: &frontend::Resources {
-                            palette: &frontend::DarkPalette {},
-                            font: self.font,
-                        },
-                    },
+                    &mut ctx,
                     path_to_json,
                 ))
             },

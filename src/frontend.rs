@@ -127,7 +127,7 @@ pub struct Resources<'a> {
 }
 
 pub struct PresentationContext<'a> {
-    pub frame: &'a nanovg::Frame<'a>,
+    pub frame: nanovg::Frame<'a>,
     pub time: f32,
-    pub resources: &'a Resources<'a>,
+    pub resources: Resources<'a>,
 }

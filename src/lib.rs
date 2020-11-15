@@ -56,16 +56,14 @@ impl DrawZone {
 
     pub fn constraint_to_aspect(&self, aspect: Option<f32>) -> DrawZone {
         match aspect {
-            Some(aspect) => {
-                DrawZone {
-                    m: self.m,
-                    size: match aspect > self.aspect() {
-                        true => Vector2::new(self.size.x, 1.0 / aspect * self.size.x),
-                        false => Vector2::new(aspect * self.size.y, self.size.y),
-                    },
-                }
+            Some(aspect) => DrawZone {
+                m: self.m,
+                size: match aspect > self.aspect() {
+                    true => Vector2::new(self.size.x, 1.0 / aspect * self.size.x),
+                    false => Vector2::new(aspect * self.size.y, self.size.y),
+                },
             },
-            None => *self
+            None => *self,
         }
     }
 }
@@ -80,6 +78,8 @@ pub struct AfterInit<TPrivateData> {
     pub internal_data: TPrivateData,
 }
 
+type DrawChild<'a> = Box<dyn FnMut(&mut frontend::PresentationContext, DrawZone) -> DrawZone + 'a>;
+
 pub trait Component<TComponentPublicInstanceData, TComponentInternalInstanceData>
 where
     TComponentPublicInstanceData: serde::de::DeserializeOwned,
@@ -89,16 +89,15 @@ where
     fn get_default_data(&self) -> Option<TComponentPublicInstanceData>;
     fn init_instance(
         &self,
-        ctx: &frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         data: &TComponentPublicInstanceData,
-        sizes: &[ControlGeometry],
-    ) -> AfterInit<TComponentInternalInstanceData>;
+    ) -> TComponentInternalInstanceData;
 
     fn draw(
         &self,
-        ctx: &frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         zone: DrawZone,
-        children: &mut [Box<dyn FnMut(DrawZone) + '_>],
+        children: &mut [DrawChild],
         internal_data: &mut TComponentInternalInstanceData,
         public_data: &TComponentPublicInstanceData,
     );
@@ -106,22 +105,22 @@ where
 
 type WrappedInit = Box<
     dyn Fn(
-        &frontend::PresentationContext,
+        &mut frontend::PresentationContext,
         &serde_json::Value,
-        &[ControlGeometry],
-    ) -> Option<(WrappedDraw, ControlGeometry)>,
+        usize,
+    ) -> Option<WrappedDraw>,
 >;
 
 type WrappedDraw = Box<
     dyn FnMut(
-        &frontend::PresentationContext,
+        &mut frontend::PresentationContext,
         DrawZone,
-        &mut [Box<dyn FnMut(DrawZone) + '_>],
+        &mut [DrawChild],
         &serde_json::Map<String, serde_json::Value>,
     ),
 >;
 pub type Hooks = HashMap<String, serde_json::Map<String, serde_json::Value>>;
-pub type View = (TreeComponent, ControlGeometry);
+pub type View = TreeComponent;
 
 pub struct TreeComponent {
     children: Vec<TreeComponent>,
@@ -130,10 +129,16 @@ pub struct TreeComponent {
 }
 
 impl TreeComponent {
-    pub fn draw(&mut self, ctx: &frontend::PresentationContext, zone: DrawZone, hooks: &Hooks) {
-        let mut draws: Vec<Box<dyn FnMut(DrawZone)>> = Vec::new();
+    pub fn draw(&mut self, ctx: &mut frontend::PresentationContext, zone: DrawZone, hooks: &Hooks) {
+        let mut draws: Vec<Box<dyn FnMut(&mut frontend::PresentationContext, DrawZone) -> DrawZone>> =
+            Vec::new();
         for child in &mut self.children {
-            let b = Box::new(move |z: DrawZone| child.draw(ctx, z, hooks));
+            let b = Box::new(
+                move |ctx: &mut frontend::PresentationContext, z: DrawZone| -> DrawZone {
+                    child.draw(ctx, z, hooks);
+                    DrawZone::from_rect(Vector2::new(0.0, 0.0),Vector2::new(0.0, 0.0))
+                },
+            );
             draws.push(b);
         }
 
@@ -179,58 +184,50 @@ impl Manager {
     }
 
     fn mk_init<T1, T2>(
-        ctx: &frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         component_type: std::rc::Rc<Box<dyn Component<T1, T2>>>, // fixme Rc<Box> => Rc
-        children: &[ControlGeometry],
+        children_n: usize,
         public_data: T1,
         size_preference: f32,
-    ) -> (WrappedDraw, ControlGeometry)
+    ) -> WrappedDraw
     where
         T1: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
         T2: 'static,
     {
-        let after_init =
-            component_type
-                .as_ref()
-                .as_ref()
-                .init_instance(ctx, &public_data, children);
-        let mut internal_data = after_init.internal_data;
+        let mut internal_data = component_type
+            .as_ref()
+            .as_ref()
+            .init_instance(ctx, &public_data);
 
         match component_type.max_children() {
-            Some(max) => assert!(children.len() <= (max as usize)),
+            Some(max) => assert!(children_n <= (max as usize)),
             None => {}
         }
 
-        (
-            Box::new(
-                move |ctx: &frontend::PresentationContext,
-                      zone: DrawZone,
-                      children: &mut [Box<dyn FnMut(DrawZone) + '_>],
-                      my_hooks: &serde_json::Map<String, serde_json::Value>| {
-                    if my_hooks.len() == 0 {
-                        component_type.as_ref().as_ref().draw(
-                            ctx,
-                            zone,
-                            children,
-                            &mut internal_data,
-                            &public_data,
-                        );
-                    } else {
-                        let merged_data = Manager::join_hooks(&public_data, my_hooks);
+        Box::new(
+            move |ctx: &mut frontend::PresentationContext,
+                  zone: DrawZone,
+                  children: &mut [DrawChild],
+                  my_hooks: &serde_json::Map<String, serde_json::Value>| {
+                if my_hooks.len() == 0 {
+                    component_type.as_ref().as_ref().draw(
+                        ctx,
+                        zone,
+                        children,
+                        &mut internal_data,
+                        &public_data,
+                    );
+                } else {
+                    let merged_data = Manager::join_hooks(&public_data, my_hooks);
 
-                        component_type.as_ref().as_ref().draw(
-                            ctx,
-                            zone,
-                            children,
-                            &mut internal_data,
-                            &merged_data,
-                        );
-                    }
-                },
-            ),
-            ControlGeometry {
-                aspect: after_init.aspect,
-                size_preference: size_preference,
+                    component_type.as_ref().as_ref().draw(
+                        ctx,
+                        zone,
+                        children,
+                        &mut internal_data,
+                        &merged_data,
+                    );
+                }
             },
         )
     }
@@ -246,10 +243,10 @@ impl Manager {
         let __stored_component = rc::Rc::clone(&stored_component);
 
         let mk_wrapped_init = Box::new(
-            move |ctx: &frontend::PresentationContext,
+            move |ctx: &mut frontend::PresentationContext,
                   json: &serde_json::Value,
-                  children: &[ControlGeometry]|
-                  -> Option<(WrappedDraw, ControlGeometry)> {
+                  children_n: usize|
+                  -> Option<WrappedDraw> {
                 let __stored_component2 = rc::Rc::clone(&__stored_component);
 
                 let data = match TComponentData::deserialize(json) {
@@ -266,7 +263,7 @@ impl Manager {
                 Some(Manager::mk_init(
                     ctx,
                     __stored_component2,
-                    children,
+                    children_n,
                     data,
                     1.0,
                 ))
@@ -279,7 +276,7 @@ impl Manager {
 
     pub fn make_screen(
         &self,
-        ctx: &frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         path_to_json: &str,
     ) -> Option<View> {
         let json = fs::read_to_string(path_to_json).unwrap();
@@ -293,27 +290,25 @@ impl Manager {
 
     pub fn build_tree(
         &self,
-        ctx: &frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         v: &serde_json::Value,
     ) -> Option<View> {
         let mk_init = &self.controls_types[v["type"].as_str()?];
 
         let mut children: Vec<TreeComponent> = Vec::new();
-        let mut children_geometries: Vec<ControlGeometry> = Vec::new();
 
         match v["children"].as_array() {
             Some(json_children) => {
                 for json_child in json_children {
                     let child_n_geometry = self.build_tree(ctx, json_child)?;
-                    children.push(child_n_geometry.0);
-                    children_geometries.push(child_n_geometry.1);
+                    children.push(child_n_geometry);
                 }
             }
             None => {}
         }
 
-        match mk_init(ctx, &v["data"], &children_geometries) {
-            Some((wrapped_draw, geometry)) => Some((
+        match mk_init(ctx, &v["data"], children.len()) {
+            Some(wrapped_draw) => Some(
                 TreeComponent {
                     children: children,
                     draw: wrapped_draw,
@@ -321,9 +316,8 @@ impl Manager {
                         Some(s) => Some(s.to_string()),
                         None => None,
                     },
-                },
-                geometry,
-            )),
+                }
+            ),
             None => None,
         }
     }

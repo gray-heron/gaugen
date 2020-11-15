@@ -1,8 +1,8 @@
 use crate::frontend;
 use crate::*;
 
-use nalgebra::Vector2;
 use math::round;
+use nalgebra::Vector2;
 
 // =========================== SPACER ===========================
 
@@ -26,23 +26,13 @@ impl Component<SpacerInstance, ()> for Spacer {
         "Spacer"
     }
 
-    fn init_instance(
-        &self,
-        __ctx: &frontend::PresentationContext,
-        __data: &SpacerInstance,
-        sizes: &[ControlGeometry],
-    ) -> AfterInit<()> {
-        AfterInit {
-            aspect: sizes[0].aspect,
-            internal_data: (),
-        }
-    }
+    fn init_instance(&self, __ctx: &mut frontend::PresentationContext, __data: &SpacerInstance) {}
 
     fn draw(
         &self,
-        __ctx: &frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         zone: DrawZone,
-        children: &mut [Box<dyn FnMut(DrawZone) + '_>],
+        children: &mut [DrawChild],
         __internal_data: &mut (),
         data: &SpacerInstance,
     ) {
@@ -53,7 +43,7 @@ impl Component<SpacerInstance, ()> for Spacer {
             size: zone.size * data.spacing,
         };
 
-        children[0].as_mut()(childzone);
+        children[0].as_mut()(ctx, childzone);
     }
 }
 
@@ -88,7 +78,7 @@ struct SplitInternalData {
 }
 
 impl SplitInstance {
-    // primary dimension = along split direction
+    // primary dimension = perpendicular to the separators
     fn pm<'a>(&self, vector: &'a mut Vector2<f32>) -> &'a mut f32 {
         if self.direction == SplitDirection::Horizontal {
             &mut vector.x
@@ -142,43 +132,12 @@ impl Component<SplitInstance, SplitInternalData> for Split {
 
     fn init_instance(
         &self,
-        __ctx: &frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         data: &SplitInstance,
-        sizes: &[ControlGeometry],
-    ) -> AfterInit<SplitInternalData> {
-        if data.mode == SplitMode::EqualSide {
-            let mut internal_sizes: Vec<Vector2<f32>> = Vec::new();
-            let mut total_size = 0.0;
-
-            for size in sizes {
-                let aspect = match size.aspect {
-                    Some(aspect) => aspect,
-                    None => size.size_preference,
-                };
-
-                let relative_aspect = data.aspect_to_primary_to_secondary(aspect);
-
-                internal_sizes.push(Vector2::new(relative_aspect, 1.0));
-                total_size += relative_aspect;
-            }
-
-            AfterInit {
-                aspect: Some(data.aspect_to_primary_to_secondary(total_size)),
-                internal_data: SplitInternalData {
-                    sizes: internal_sizes,
-                    primary_width: total_size,
-                },
-            }
-        } else {
-            panic!();
-            /*
-            AfterInit{
-                aspect: sizes[0].aspect,
-                internal_data: SplitInternalData{
-                    sizes:
-                }
-            }
-            */
+    ) -> SplitInternalData {
+        SplitInternalData {
+            sizes: Vec::new(),
+            primary_width: 0.0,
         }
     }
 
@@ -192,13 +151,49 @@ impl Component<SplitInstance, SplitInternalData> for Split {
 
     fn draw(
         &self,
-        ctx: &frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         zone: DrawZone,
-        children: &mut [Box<dyn FnMut(DrawZone) + '_>],
+        children: &mut [DrawChild],
         internal_data: &mut SplitInternalData,
         data: &SplitInstance,
     ) {
-        assert_eq!(children.len(), internal_data.sizes.len());
+        if internal_data.sizes.len() != children.len() {
+            internal_data.primary_width = 0.0;
+            internal_data.sizes.clear();
+
+            for _ in 0..children.len() {
+                internal_data.sizes.push(Vector2::new(1.0, 1.0));
+                internal_data.primary_width += 1.0;
+            }
+        }
+        /*
+                if data.mode == SplitMode::EqualSide {
+                    let mut internal_sizes: Vec<Vector2<f32>> = Vec::new();
+                    let mut total_size = 0.0;
+
+                    for size in sizes {
+                        let aspect = match size.aspect {
+                            Some(aspect) => aspect,
+                            None => size.size_preference,
+                        };
+
+                        let relative_aspect = data.aspect_to_primary_to_secondary(aspect);
+
+                        internal_sizes.push(Vector2::new(relative_aspect, 1.0));
+                        total_size += relative_aspect;
+                    }
+                } else {
+                    panic!();
+                    /*
+                    AfterInit{
+                        aspect: sizes[0].aspect,
+                        internal_data: SplitInternalData{
+                            sizes:
+                        }
+                    }
+                    */
+                }
+        */
 
         if data.mode == SplitMode::EqualSide {
             let space_per_unit = data.p(&zone.size) / internal_data.primary_width;
@@ -260,11 +255,7 @@ pub struct GroupingBoxData {
 
 pub struct GroupingBox {}
 
-struct GroupingBoxInternalData {
-    child_aspect: Option<f32>,
-}
-
-impl Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox {
+impl Component<GroupingBoxData, ()> for GroupingBox {
     // primary dimension = along split direction
     fn max_children(&self) -> Option<u32> {
         Some(1)
@@ -282,36 +273,14 @@ impl Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox {
         })
     }
 
-    fn init_instance(
-        &self,
-        __ctx: &frontend::PresentationContext,
-        data: &GroupingBoxData,
-        sizes: &[ControlGeometry],
-    ) -> AfterInit<GroupingBoxInternalData> {
-        assert_eq!(sizes.len(), 1);
-
-        let aspect = match sizes[0].aspect {
-            Some(aspect) => match data.title_size {
-                GroupingBoxTitleSize::RelativeToHeight(height) => Some(aspect / (1.0 + height)),
-                _ => Some(aspect),
-            },
-            None => None,
-        };
-
-        AfterInit {
-            aspect: aspect,
-            internal_data: GroupingBoxInternalData {
-                child_aspect: sizes[0].aspect,
-            },
-        }
-    }
+    fn init_instance(&self, __ctx: &mut frontend::PresentationContext, __data: &GroupingBoxData) {}
 
     fn draw(
         &self,
-        ctx: &frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         zone: DrawZone,
-        children: &mut [Box<dyn FnMut(DrawZone) + '_>],
-        internal_data: &mut GroupingBoxInternalData,
+        children: &mut [DrawChild],
+        internal_data: &mut (),
         public_data: &GroupingBoxData,
     ) {
         let title_height = match public_data.title_size {
@@ -333,15 +302,13 @@ impl Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox {
 
         let text_zone = DrawZone {
             m: text_zone.m,
-            size: text_zone.size ,
+            size: text_zone.size,
         };
 
         let child_zone = DrawZone {
             m: child_zone.m,
             size: child_zone.size * public_data.spacing,
         };
-
-        let child_zone = child_zone.constraint_to_aspect(internal_data.child_aspect);
 
         let text_opts = nanovg::TextOptions {
             color: ctx.resources.palette.soft_front_color(),
@@ -368,11 +335,11 @@ impl Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox {
 
         let w = match public_data.title == "" {
             false => (bounds.max_x - text_zone.size.x / 2.0) * 1.2,
-            true => 0.0
-        } ;
+            true => 0.0,
+        };
 
         ctx.frame.path(
-            |path| {
+            |mut path| {
                 path.move_to((text_zone.m.x - w, text_zone.m.y));
                 path.line_to((zone.left(), text_zone.m.y));
                 path.line_to((zone.left(), zone.top()));
@@ -391,12 +358,12 @@ impl Component<GroupingBoxData, GroupingBoxInternalData> for GroupingBox {
             Default::default(),
         );
 
-        children[0].as_mut()(child_zone);
+        children[0].as_mut()(ctx, child_zone);
     }
 }
 
 // ===========================
-
+/*
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum GridDimensions {
     Fixed((i32, i32)), //tuple for better serialization
@@ -433,10 +400,10 @@ impl Component<GridData, GridInternalData> for Grid {
 
     fn init_instance(
         &self,
-        __ctx: &frontend::PresentationContext,
+        __ctx: &mut frontend::PresentationContext,
         data: &GridData,
-        children_sizes: &[ControlGeometry],
-    ) -> AfterInit<GridInternalData> {
+        children_sizes: &[DrawChild],
+    ) -> GridInternalData {
         let mut total_aspect = 0.0;
         let mut children_with_aspect = 0;
 
@@ -481,7 +448,7 @@ impl Component<GridData, GridInternalData> for Grid {
 
     fn draw(
         &self,
-        __ctx: &frontend::PresentationContext,
+        __ctx: &mut frontend::PresentationContext,
         zone: DrawZone,
         children: &mut [Box<dyn FnMut(DrawZone) + '_>],
         internal_data: &mut GridInternalData,
@@ -526,7 +493,7 @@ impl Component<GridData, GridInternalData> for Grid {
         }
     }
 }
-
+*/
 // =========================== UTILS ===========================
 
 pub fn components() -> impl Fn(&mut Manager) {
@@ -534,11 +501,11 @@ pub fn components() -> impl Fn(&mut Manager) {
         let split = Box::new(Split { spacer: Spacer {} });
         let spacer = Box::new(Spacer {});
         let grouping_box = Box::new(GroupingBox {});
-        let grid = Box::new(Grid{});
+        //let grid = Box::new(Grid{});
 
         manager.register_component_type(split);
         manager.register_component_type(spacer);
         manager.register_component_type(grouping_box);
-        manager.register_component_type(grid);
+        //manager.register_component_type(grid);
     }
 }

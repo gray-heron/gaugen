@@ -61,12 +61,13 @@ pub struct RotationalIndicatorData {
 impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
     fn draw(
         &self,
-        ctx: &PresentationContext,
+        ctx: &mut PresentationContext,
         zone: DrawZone,
-        __children: &mut [Box<dyn FnMut(DrawZone) + '_>],
+        __children: &mut [DrawChild],
         __internal_data: &mut (),
         data: &RotationalIndicatorData,
     ) {
+        let zone = zone.constraint_to_aspect(Some(1.15));
         let base_radius = zone.size.x / 2.4;
         let base_thickness = base_radius / 10.0;
         let ymo = base_radius / -5.5; //y middle offset
@@ -93,7 +94,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             let arcend = (1.0 - p1) * (consts::PI + CGA * 2.0);
 
             ctx.frame.path(
-                |path| {
+                |mut path| {
                     path.arc(
                         (zone.m.x, zone.m.y - ymo),
                         radius,
@@ -195,14 +196,10 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
 
     fn init_instance(
         &self,
-        __ctx: &PresentationContext,
-        __data: &RotationalIndicatorData,
-        __sizes: &[ControlGeometry],
-    ) -> AfterInit<()> {
-        AfterInit {
-            aspect: Some(1.15),
-            internal_data: (),
-        }
+        __ctx: &mut PresentationContext,
+        __data: &RotationalIndicatorData
+    ) {
+        
     }
 
     fn get_default_data(&self) -> Option<RotationalIndicatorData> {
@@ -236,17 +233,19 @@ pub struct TextFieldData {
     pub back_color: SerializableColor,
 }
 
-impl Component<TextFieldData, ()> for TextField {
+impl Component<TextFieldData, f32> for TextField {
     fn draw(
         &self,
-        ctx: &PresentationContext,
+        ctx: &mut PresentationContext,
         zone: DrawZone,
-        __children: &mut [Box<dyn FnMut(DrawZone) + '_>],
-        __internal_data: &mut (),
+        __children: &mut [DrawChild],
+        aspect: &mut f32,
         data: &TextFieldData,
     ) {
+        let zone = zone.constraint_to_aspect(Some(*aspect));
+
         ctx.frame.path(
-            |path| {
+            |mut path| {
                 path.rect((zone.left(), zone.bottom()), (zone.size.x, zone.size.y));
                 path.fill(data.back_color.color, Default::default());
             },
@@ -271,10 +270,9 @@ impl Component<TextFieldData, ()> for TextField {
 
     fn init_instance(
         &self,
-        ctx: &PresentationContext,
-        data: &TextFieldData,
-        __sizes: &[ControlGeometry],
-    ) -> AfterInit<()> {
+        ctx: &mut PresentationContext,
+        data: &TextFieldData
+    ) -> f32{
         let bounds = ctx.frame.text_box_bounds(
             ctx.resources.font,
             (0.0, 0.0),
@@ -285,10 +283,7 @@ impl Component<TextFieldData, ()> for TextField {
         let w = bounds.max_x - bounds.min_x;
         let h = bounds.max_y - bounds.min_y;
 
-        AfterInit {
-            aspect: Some(w / h),
-            internal_data: (),
-        }
+        w / h
     }
 
     fn get_default_data(&self) -> Option<TextFieldData> {
@@ -377,7 +372,7 @@ impl SpatialSituationIndicator {
         ) {
             (Some(tp1), Some(tp2)) => {
                 frame.path(
-                    |path| {
+                    |mut path| {
                         let from = (
                             tp1.x * zone.size.x + zone.m.x,
                             tp1.y * zone.size.y + zone.m.y,
@@ -399,7 +394,7 @@ impl SpatialSituationIndicator {
 
     pub fn draw_text(
         &self,
-        ctx: &PresentationContext,
+        ctx: &mut PresentationContext,
         zone: &DrawZone,
         o: &nalgebra::UnitQuaternion<f32>,
         zoom: f32,
@@ -430,10 +425,10 @@ impl SpatialSituationIndicator {
         }
     }
 
-    pub fn draw_ffd(&self, ctx: &PresentationContext, zone: &DrawZone) {
+    pub fn draw_ffd(&self, ctx: &mut PresentationContext, zone: &DrawZone) {
         let unit = zone.size.y / 20.0;
         ctx.frame.path(
-            |path| {
+            |mut path| {
                 path.move_to((zone.m.x - 2.0 * unit, zone.m.y));
                 path.line_to((zone.m.x - 0.66 * unit, zone.m.y));
                 path.line_to((zone.m.x, zone.m.y + unit));
@@ -473,21 +468,16 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
     }
     fn init_instance(
         &self,
-        __ctx: &PresentationContext,
-        __data: &SpatialSituationIndicatorData,
-        __sizes: &[ControlGeometry],
-    ) -> AfterInit<()> {
-        AfterInit {
-            aspect: Some(1.0),
-            internal_data: (),
-        }
-    }
-
+        __ctx: &mut PresentationContext,
+        __data: &SpatialSituationIndicatorData
+    )
+    {}
+    
     fn draw(
         &self,
-        ctx: &PresentationContext,
+        ctx: &mut PresentationContext,
         zone: DrawZone,
-        __children: &mut [Box<dyn FnMut(DrawZone) + '_>],
+        __children: &mut [DrawChild],
         __internal_data: &mut (),
         public_data: &SpatialSituationIndicatorData,
     ) {
@@ -497,7 +487,7 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
             UnitQuaternion::from_euler_angles(public_data.roll, public_data.pitch, public_data.yaw);
 
         ctx.frame.path(
-            |path| {
+            |mut path| {
                 path.circle((zone.m.x, zone.m.y), 1.0 * zone.size.x / 2.0);
                 path.circle((zone.m.x, zone.m.y), 0.9 * zone.size.x / 2.0);
                 path.stroke(
@@ -523,7 +513,7 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
             let p3 = Vector2::new(7.0 + orientation.z.deg(), h);
 
             self.draw_line(
-                ctx.frame,
+                &mut ctx.frame,
                 &zone,
                 &orientation_quat,
                 public_data.projection_zoom,
@@ -570,7 +560,7 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
             let p3 = Vector2::new(y, -4.0 + ladder_height);
 
             self.draw_line(
-                ctx.frame,
+                &mut ctx.frame,
                 &zone,
                 &orientation_quat,
                 public_data.projection_zoom,
