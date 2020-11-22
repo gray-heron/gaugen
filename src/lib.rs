@@ -2,6 +2,7 @@ pub mod basic_components;
 pub mod frontend;
 pub mod geometry_components;
 pub mod session;
+mod helpers;
 
 use nalgebra::Vector2;
 use serde;
@@ -9,73 +10,14 @@ use serde_json;
 use std::collections::HashMap;
 use std::fs;
 use std::rc;
+use nanovg::{DrawZone, Color, StrokeOptions};
+use std::cell::RefCell;
 
 //RunTime Parametric Structures
-
-#[derive(Copy, Clone)]
-pub struct DrawZone {
-    pub m: Vector2<f32>,
-    pub size: Vector2<f32>,
-}
-
-impl DrawZone {
-    pub fn left(&self) -> f32 {
-        self.m.x - self.size.x / 2.0
-    }
-
-    pub fn right(&self) -> f32 {
-        self.m.x + self.size.x / 2.0
-    }
-
-    pub fn top(&self) -> f32 {
-        self.m.y + self.size.y / 2.0
-    }
-
-    pub fn bottom(&self) -> f32 {
-        self.m.y - self.size.y / 2.0
-    }
-
-    pub fn top_left(&self) -> Vector2<f32> {
-        Vector2::new(self.left(), self.bottom())
-    }
-
-    pub fn bottom_right(&self) -> Vector2<f32> {
-        Vector2::new(self.right(), self.top())
-    }
-
-    pub fn from_rect(top_left: Vector2<f32>, bottom_right: Vector2<f32>) -> DrawZone {
-        DrawZone {
-            m: (top_left + bottom_right) / 2.0,
-            size: bottom_right - top_left,
-        }
-    }
-
-    pub fn aspect(&self) -> f32 {
-        self.size.x / self.size.y
-    }
-
-    pub fn constraint_to_aspect(&self, aspect: Option<f32>) -> DrawZone {
-        match aspect {
-            Some(aspect) => DrawZone {
-                m: self.m,
-                size: match aspect > self.aspect() {
-                    true => Vector2::new(self.size.x, 1.0 / aspect * self.size.x),
-                    false => Vector2::new(aspect * self.size.y, self.size.y),
-                },
-            },
-            None => *self,
-        }
-    }
-}
 
 pub struct ControlGeometry {
     pub aspect: Option<f32>,
     pub size_preference: f32,
-}
-
-pub struct AfterInit<TPrivateData> {
-    pub aspect: Option<f32>,
-    pub internal_data: TPrivateData,
 }
 
 type DrawChild<'a> = Box<dyn FnMut(&mut frontend::PresentationContext, DrawZone) -> DrawZone + 'a>;
@@ -125,18 +67,35 @@ pub type View = TreeComponent;
 pub struct TreeComponent {
     children: Vec<TreeComponent>,
     draw: WrappedDraw,
-    name: Option<String>,
+    name: Option<String>
 }
 
 impl TreeComponent {
-    pub fn draw(&mut self, ctx: &mut frontend::PresentationContext, zone: DrawZone, hooks: &Hooks) {
+    fn shell_merge_bottom(stack: &mut Vec<DrawZone>, zone: &DrawZone) -> DrawZone {
+        stack.last_mut().unwrap().convex_with_a_zone(zone);
+        *stack.last().unwrap()
+    }
+
+    pub fn draw(&mut self, ctx: &mut frontend::PresentationContext, zone: DrawZone, hooks: &Hooks, layers: &RefCell<Vec<DrawZone>>) {
         let mut draws: Vec<Box<dyn FnMut(&mut frontend::PresentationContext, DrawZone) -> DrawZone>> =
             Vec::new();
+
         for child in &mut self.children {
+
             let b = Box::new(
                 move |ctx: &mut frontend::PresentationContext, z: DrawZone| -> DrawZone {
-                    child.draw(ctx, z, hooks);
-                    DrawZone::from_rect(Vector2::new(0.0, 0.0),Vector2::new(0.0, 0.0))
+                    TreeComponent::shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
+                    ctx.shell_stack.push(DrawZone::new_empty());
+
+                    child.draw(ctx, z, hooks, layers);
+
+                    let drawn = TreeComponent::shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
+                    ctx.shell_stack.pop();
+                    ctx.shell_stack.last_mut().unwrap().convex_with_a_zone(&drawn);
+
+                    layers.borrow_mut().push(drawn);
+                    
+                    drawn
                 },
             );
             draws.push(b);
@@ -153,6 +112,7 @@ impl TreeComponent {
         };
 
         self.draw.as_mut()(ctx, zone, &mut draws[..], my_hooks);
+        TreeComponent::shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
     }
 }
 

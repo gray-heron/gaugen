@@ -41,6 +41,7 @@ impl Component<SpacerInstance, ()> for Spacer {
         let childzone = DrawZone {
             m: zone.m,
             size: zone.size * data.spacing,
+            empty: false
         };
 
         children[0].as_mut()(ctx, childzone);
@@ -283,6 +284,8 @@ impl Component<GroupingBoxData, ()> for GroupingBox {
         internal_data: &mut (),
         public_data: &GroupingBoxData,
     ) {
+        let ref palette = ctx.resources.palette;
+
         let title_height = match public_data.title_size {
             GroupingBoxTitleSize::RelativeToHeight(height) => zone.size.y * height,
             GroupingBoxTitleSize::Absolute(height) => height,
@@ -303,11 +306,13 @@ impl Component<GroupingBoxData, ()> for GroupingBox {
         let text_zone = DrawZone {
             m: text_zone.m,
             size: text_zone.size,
+            empty: false
         };
 
         let child_zone = DrawZone {
             m: child_zone.m,
             size: child_zone.size * public_data.spacing,
+            empty: false
         };
 
         let text_opts = nanovg::TextOptions {
@@ -339,16 +344,16 @@ impl Component<GroupingBoxData, ()> for GroupingBox {
         };
 
         ctx.frame.path(
-            |mut path| {
+            |path| {
                 path.move_to((text_zone.m.x - w, text_zone.m.y));
                 path.line_to((zone.left(), text_zone.m.y));
-                path.line_to((zone.left(), zone.top()));
-                path.line_to((zone.right(), zone.top()));
+                path.line_to((zone.left(), zone.bottom()));
+                path.line_to((zone.right(), zone.bottom()));
                 path.line_to((zone.right(), text_zone.m.y));
                 path.line_to((text_zone.m.x + w, text_zone.m.y));
 
                 path.stroke(
-                    ctx.resources.palette.soft_front_color(),
+                    palette.soft_front_color(),
                     nanovg::StrokeOptions {
                         width: 3.0,
                         ..Default::default()

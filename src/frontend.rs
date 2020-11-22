@@ -1,4 +1,4 @@
-use nanovg::{Color, Font};
+use nanovg::{Color, Font, DrawZone};
 use std::fmt;
 
 
@@ -130,4 +130,5 @@ pub struct PresentationContext<'a> {
     pub frame: nanovg::Frame<'a>,
     pub time: f32,
     pub resources: Resources<'a>,
+    pub shell_stack: Vec<DrawZone>
 }

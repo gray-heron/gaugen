@@ -1,15 +1,11 @@
 use crate::frontend;
 use crate::*;
 
-extern crate gl;
-extern crate glutin;
-extern crate nalgebra as na;
-extern crate nanovg;
-extern crate rand;
-
 use glutin::GlContext;
 use nalgebra::Vector2;
 use std::time::Instant;
+use nanovg::{*};
+use std::cell::RefCell;
 
 const INIT_WINDOW_SIZE: (u32, u32) = (800, 800);
 
@@ -159,8 +155,9 @@ impl Session<'_> {
 
         let __font = self.font; //so no "self" is not used in closure
         let __time = &self.start_time;
+        let layers = RefCell::new(Vec::new());
 
-        self.context.frame((width, height), dpi, |mut frame| {
+        self.context.frame((width, height), dpi, |frame| {
             let res = frontend::Resources {
                 palette: palette,
                 font: __font,
@@ -169,13 +166,24 @@ impl Session<'_> {
             let mut ctx = frontend::PresentationContext {
                 frame: frame,
                 time: get_elapsed_time(__time),
-                resources: res
+                resources: res,
+                shell_stack: vec!{DrawZone::new_empty()}
             };
 
             let zone =
                 DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height));
 
-            view.draw(&mut ctx, zone, hooks);
+            view.draw(&mut ctx, zone, hooks, &layers);
+
+            let mut layers = layers.into_inner();
+            
+            layers.push(ctx.shell_stack.pop().unwrap());
+
+            for layer in layers {
+                let drawn = layer;
+                
+                helpers::dotted_zone(&mut ctx, &layer);
+            }
         });
 
         screen.gl_window.swap_buffers().unwrap();
@@ -191,7 +199,7 @@ impl Session<'_> {
         self.context.frame(
             (width as f32, height as f32),
             self.default_screen.gl_window.hidpi_factor(),
-            |mut frame| {
+            |frame| {
                 let res = frontend::Resources {
                     palette: &frontend::DarkPalette {},
                     font: self.font,
@@ -200,7 +208,8 @@ impl Session<'_> {
                 let mut ctx = frontend::PresentationContext {
                     frame: frame,
                     time: 0.0,
-                    resources: res
+                    resources: res,
+                    shell_stack: vec!{DrawZone::new_empty()}
                 };
 
                 ret = Some(self.manager.make_screen(

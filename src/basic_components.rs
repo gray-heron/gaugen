@@ -67,6 +67,9 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
         __internal_data: &mut (),
         data: &RotationalIndicatorData,
     ) {
+        let ref palette = ctx.resources.palette;
+        let ref mut frame = ctx.frame;
+
         let zone = zone.constraint_to_aspect(Some(1.15));
         let base_radius = zone.size.x / 2.4;
         let base_thickness = base_radius / 10.0;
@@ -84,7 +87,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             }
         };
 
-        let smartarc = |p0: f32,
+        let mut smartarc = |p0: f32,
                         p1: f32,
                         radius: f32,
                         stroke_width: f32,
@@ -93,8 +96,8 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             let arcstart = p0 * (consts::PI + CGA * 2.0);
             let arcend = (1.0 - p1) * (consts::PI + CGA * 2.0);
 
-            ctx.frame.path(
-                |mut path| {
+            frame.path(
+                |path| {
                     path.arc(
                         (zone.m.x, zone.m.y - ymo),
                         radius,
@@ -105,6 +108,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
                     path.fill(fill_color, Default::default());
                     path.stroke(
                         stroke_color,
+                        
                         StrokeOptions {
                             width: stroke_width,
                             ..Default::default()
@@ -128,7 +132,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
                 current_range_end,
                 base_radius * 1.13,
                 base_thickness,
-                ctx.resources.palette.status_to_color(range_end.1),
+                palette.status_to_color(range_end.1),
                 Color::from_rgba(0, 0, 0, 0),
             );
 
@@ -145,7 +149,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             base_radius * 1.09,
             0.0,
             Color::from_rgba(160, 160, 160, 255),
-            ctx.resources.palette.status_to_color_bg(Status::Ok),
+            palette.status_to_color_bg(Status::Ok),
         );
 
         if nvalue > 0.0 {
@@ -245,8 +249,8 @@ impl Component<TextFieldData, f32> for TextField {
         let zone = zone.constraint_to_aspect(Some(*aspect));
 
         ctx.frame.path(
-            |mut path| {
-                path.rect((zone.left(), zone.bottom()), (zone.size.x, zone.size.y));
+            |path| {
+                path.rect((zone.left(), zone.top()), (zone.size.x, zone.size.y));
                 path.fill(data.back_color.color, Default::default());
             },
             Default::default(),
@@ -356,7 +360,7 @@ impl SpatialSituationIndicator {
 
     pub fn draw_line<F>(
         &self,
-        frame: &Frame,
+        frame: &mut Frame,
         zone: &DrawZone,
         o: &nalgebra::UnitQuaternion<f32>,
         zoom: f32,
@@ -372,7 +376,7 @@ impl SpatialSituationIndicator {
         ) {
             (Some(tp1), Some(tp2)) => {
                 frame.path(
-                    |mut path| {
+                    |path| {
                         let from = (
                             tp1.x * zone.size.x + zone.m.x,
                             tp1.y * zone.size.y + zone.m.y,
@@ -428,7 +432,7 @@ impl SpatialSituationIndicator {
     pub fn draw_ffd(&self, ctx: &mut PresentationContext, zone: &DrawZone) {
         let unit = zone.size.y / 20.0;
         ctx.frame.path(
-            |mut path| {
+            |path| {
                 path.move_to((zone.m.x - 2.0 * unit, zone.m.y));
                 path.line_to((zone.m.x - 0.66 * unit, zone.m.y));
                 path.line_to((zone.m.x, zone.m.y + unit));
@@ -487,7 +491,7 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
             UnitQuaternion::from_euler_angles(public_data.roll, public_data.pitch, public_data.yaw);
 
         ctx.frame.path(
-            |mut path| {
+            |path| {
                 path.circle((zone.m.x, zone.m.y), 1.0 * zone.size.x / 2.0);
                 path.circle((zone.m.x, zone.m.y), 0.9 * zone.size.x / 2.0);
                 path.stroke(

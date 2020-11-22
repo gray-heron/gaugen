@@ -1,0 +1,90 @@
+{
+    "type": "Split",
+    "data": {
+        "direction": "Vertical"
+    },
+    "children": [
+        {
+            "type": "TextField"
+        },
+        {
+            "type": "Split",
+            "data": {
+                "direction": "Horizontal"
+            },
+            "children": [
+                {
+                    "type": "GroupingBox",
+                    "data": {
+                        "title": "Demo",
+                        "spacing": 1.0,
+                        "title_size": {
+                            "RelativeToHeight": 0.2
+                        }
+                    },
+                    "children": [
+                        {
+                            "type": "Split",
+                            "data": {
+                                "direction": "Vertical"
+                            },
+                            "children": [
+                                {
+                                    "type": "TextField",
+                                    "name": "my_textfield",
+                                    "data": {
+                                        "text": "Hello world!"
+                                    }
+                                },
+                                {
+                                    "type": "TextField"
+                                },
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "my_indicator"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "GroupingBox",
+                    "data": {
+                        "spacing": 1.0,
+                        "title": "Demo",
+                        "title_size": {
+                            "Absolute": 85
+                        }
+                    },
+                    "children": [
+                        {
+                            "type": "Split",
+                            "data": {
+                                "direction": "Vertical"
+                            },
+                            "children": [
+                                {
+                                    "type": "TextField",
+                                    "name": "my_textfield",
+                                    "data": {
+                                        "text": "Hello world!"
+                                    }
+                                },
+                                {
+                                    "type": "TextField"
+                                },
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "my_indicator"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "type": "TextField"
+        }
+    ]
+}
