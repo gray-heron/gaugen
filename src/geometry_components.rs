@@ -3,6 +3,7 @@ use crate::*;
 
 use math::round;
 use nalgebra::Vector2;
+use std::f32;
 
 // =========================== SPACER ===========================
 
@@ -41,11 +42,34 @@ impl Component<SpacerInstance, ()> for Spacer {
         let childzone = DrawZone {
             m: zone.m,
             size: zone.size * data.spacing,
-            empty: false
+            empty: false,
         };
 
         children[0].as_mut()(ctx, childzone);
     }
+}
+
+// =========================== SPLIT ===========================
+
+fn draw_with_spacing(
+    ctx: &mut frontend::PresentationContext,
+    child: &mut DrawChild,
+    zone: &DrawZone,
+    spacing: f32,
+) -> DrawZone {
+    let new_zone = DrawZone {
+        m: zone.m,
+        size: zone.size * spacing,
+        empty: false,
+    };
+
+    let mut drawn = child(ctx, new_zone);
+    drawn.size *= 1.0 / spacing;
+
+    ctx.frame.mark_as_used((drawn.left(), drawn.bottom()));
+    ctx.frame.mark_as_used((drawn.right(), drawn.top()));
+
+    drawn
 }
 
 // =========================== SPLIT ===========================
@@ -69,12 +93,10 @@ pub struct SplitInstance {
     mode: SplitMode,
 }
 
-pub struct Split {
-    spacer: Spacer,
-}
+pub struct Split;
 
 struct SplitInternalData {
-    sizes: Vec<Vector2<f32>>,
+    aspects: Vec<f32>,
     primary_width: f32,
 }
 
@@ -133,11 +155,11 @@ impl Component<SplitInstance, SplitInternalData> for Split {
 
     fn init_instance(
         &self,
-        ctx: &mut frontend::PresentationContext,
-        data: &SplitInstance,
+        __ctx: &mut frontend::PresentationContext,
+        __data: &SplitInstance,
     ) -> SplitInternalData {
         SplitInternalData {
-            sizes: Vec::new(),
+            aspects: Vec::new(),
             primary_width: 0.0,
         }
     }
@@ -158,43 +180,18 @@ impl Component<SplitInstance, SplitInternalData> for Split {
         internal_data: &mut SplitInternalData,
         data: &SplitInstance,
     ) {
-        if internal_data.sizes.len() != children.len() {
+        let mut new_aspects = Vec::new();
+        let mut new_primary_width = 0.0;
+
+        if internal_data.aspects.len() != children.len() {
             internal_data.primary_width = 0.0;
-            internal_data.sizes.clear();
+            internal_data.aspects.clear();
 
             for _ in 0..children.len() {
-                internal_data.sizes.push(Vector2::new(1.0, 1.0));
+                internal_data.aspects.push(1.0);
                 internal_data.primary_width += 1.0;
             }
         }
-        /*
-                if data.mode == SplitMode::EqualSide {
-                    let mut internal_sizes: Vec<Vector2<f32>> = Vec::new();
-                    let mut total_size = 0.0;
-
-                    for size in sizes {
-                        let aspect = match size.aspect {
-                            Some(aspect) => aspect,
-                            None => size.size_preference,
-                        };
-
-                        let relative_aspect = data.aspect_to_primary_to_secondary(aspect);
-
-                        internal_sizes.push(Vector2::new(relative_aspect, 1.0));
-                        total_size += relative_aspect;
-                    }
-                } else {
-                    panic!();
-                    /*
-                    AfterInit{
-                        aspect: sizes[0].aspect,
-                        internal_data: SplitInternalData{
-                            sizes:
-                        }
-                    }
-                    */
-                }
-        */
 
         if data.mode == SplitMode::EqualSide {
             let space_per_unit = data.p(&zone.size) / internal_data.primary_width;
@@ -208,22 +205,17 @@ impl Component<SplitInstance, SplitInternalData> for Split {
                 *data.sm(&mut top_left) = *data.s(&zone.top_left());
 
                 *data.pm(&mut bottom_right) =
-                    primary_cursor + internal_data.sizes[i].x * space_per_unit;
+                    primary_cursor + internal_data.aspects[i] * space_per_unit;
                 *data.sm(&mut bottom_right) = *data.s(&zone.bottom_right());
 
                 let zone = DrawZone::from_rect(top_left, bottom_right);
 
-                self.spacer.draw(
-                    ctx,
-                    zone,
-                    &mut children[i..i + 1],
-                    &mut (),
-                    &SpacerInstance {
-                        spacing: data.spacing,
-                    },
-                );
+                let result = draw_with_spacing(ctx, &mut children[i], &zone, data.spacing);
 
-                primary_cursor += internal_data.sizes[i].x * space_per_unit;
+                let new_aspect = data.aspect_to_primary_to_secondary(result.aspect());
+                new_aspects.push(new_aspect);
+                new_primary_width += new_aspect;
+                primary_cursor += internal_data.aspects[i] * space_per_unit;
             }
         } else {
             panic!();
@@ -236,6 +228,9 @@ impl Component<SplitInstance, SplitInternalData> for Split {
             }
             */
         }
+
+        internal_data.aspects = new_aspects;
+        internal_data.primary_width = new_primary_width;
     }
 }
 
@@ -306,13 +301,13 @@ impl Component<GroupingBoxData, ()> for GroupingBox {
         let text_zone = DrawZone {
             m: text_zone.m,
             size: text_zone.size,
-            empty: false
+            empty: false,
         };
 
         let child_zone = DrawZone {
             m: child_zone.m,
             size: child_zone.size * public_data.spacing,
-            empty: false
+            empty: false,
         };
 
         let text_opts = nanovg::TextOptions {
@@ -368,10 +363,25 @@ impl Component<GroupingBoxData, ()> for GroupingBox {
 }
 
 // ===========================
-/*
+
+#[derive(Copy, Clone)]
+struct ChildGeometryProperties {
+    min_w: Option<f32>,
+    max_w: Option<f32>,
+    min_h: Option<f32>,
+    max_h: Option<f32>,
+}
+
+static DEFAULT_GEOMETRY_DATA: ChildGeometryProperties = ChildGeometryProperties {
+    min_w: None,
+    max_w: None,
+    min_h: None,
+    max_h: None,
+};
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum GridDimensions {
-    Fixed((i32, i32)), //tuple for better serialization
+    Fixed((usize, usize)), //tuple for better serialization
     Auto,
 }
 
@@ -384,7 +394,93 @@ pub struct GridData {
 pub struct Grid {}
 
 struct GridInternalData {
-    aspects: Vec<Option<f32>>,
+    geometry_data: Vec<ChildGeometryProperties>,
+    dims: (usize, usize),
+    rows_sizes: Vec<f32>,
+    columns_sizes: Vec<f32>,
+    spacing: f32
+}
+
+impl GridInternalData {
+    pub fn gd<'a>(&'a self, x: usize, y: usize) -> &'a ChildGeometryProperties {
+        if y * self.dims.1 + x < self.geometry_data.len() {
+            &self.geometry_data[y * self.dims.1 + x]
+        } else {
+            &DEFAULT_GEOMETRY_DATA
+        }
+    }
+
+    pub fn get_column_sizes(&self, column: usize) -> (Option<f32>, Option<f32>) {
+        let mut min = f32::MAX;
+        let mut max = 0.0;
+
+        for i in 0..self.dims.1 {
+            match self.gd(column, i).min_w {
+                Some(w) => {
+                    if w < min {
+                        min = w;
+                    }
+                }
+                None => {}
+            };
+
+            match self.gd(column, i).max_h {
+                Some(w) => {
+                    if w > max {
+                        max = w;
+                    }
+                }
+                None => {}
+            };
+        }
+
+        (
+            match min {
+                f32::MAX => None,
+                _ => Some(min),
+            },
+            match max {
+                0.0 => None,
+                _ => Some(max),
+            },
+        )
+    }
+
+    pub fn get_row_sizes(&self, row: usize) -> (Option<f32>, Option<f32>) {
+        let mut min = f32::MAX;
+        let mut max = 0.0;
+
+        for i in 0..self.dims.0 {
+            match self.gd(row, i).min_h {
+                Some(w) => {
+                    if w < min {
+                        min = w;
+                    }
+                }
+                None => {}
+            };
+
+            match self.gd(row, i).max_h {
+                Some(w) => {
+                    if w > max {
+                        max = w;
+                    }
+                }
+                None => {}
+            };
+        }
+
+        (
+            match min {
+                f32::MAX => None,
+                _ => Some(min),
+            },
+            match max {
+                0.0 => None,
+                _ => Some(max),
+            },
+        )
+    }
 }
 
 impl Component<GridData, GridInternalData> for Grid {
@@ -407,110 +503,91 @@ impl Component<GridData, GridInternalData> for Grid {
         &self,
         __ctx: &mut frontend::PresentationContext,
         data: &GridData,
-        children_sizes: &[DrawChild],
     ) -> GridInternalData {
-        let mut total_aspect = 0.0;
-        let mut children_with_aspect = 0;
-
-        for size in children_sizes {
-            match size.aspect {
-                Some(aspect) => {
-                    total_aspect += aspect;
-                    children_with_aspect += 1;
-                }
-                _ => {}
-            }
-        }
-
-        let dims = match data.dimensions {
-            GridDimensions::Fixed((w, h)) => (w, h),
-            GridDimensions::Auto => (
-                round::ceil((children_sizes.len() as f64).sqrt(), 0) as i32,
-                round::ceil((children_sizes.len() as f64).sqrt(), 0) as i32,
-            ),
-        };
-
-        let mean_aspect = match children_sizes.len() {
-            0 => None,
-            _ => Some(total_aspect / (children_with_aspect as f32)),
-        };
-
-        let mut children_aspects: Vec<Option<f32>> = Vec::new();
-        for size in children_sizes {
-            children_aspects.push(size.aspect);
-        }
-
-        AfterInit {
-            aspect: match mean_aspect {
-                Some(aspect) => Some(aspect * (dims.0 as f32) / (dims.1 as f32)),
-                None => None,
-            },
-            internal_data: GridInternalData {
-                aspects: children_aspects,
-            },
+        GridInternalData {
+            geometry_data: Vec::new(),
+            dims: (0, 0),
+            columns_sizes: Vec::new(),
+            rows_sizes: Vec::new(),
+            spacing: 0.9
         }
     }
 
     fn draw(
         &self,
-        __ctx: &mut frontend::PresentationContext,
+        ctx: &mut frontend::PresentationContext,
         zone: DrawZone,
-        children: &mut [Box<dyn FnMut(DrawZone) + '_>],
+        children: &mut [DrawChild],
         internal_data: &mut GridInternalData,
         public_data: &GridData,
     ) {
-        let dims = match public_data.dimensions {
-            GridDimensions::Fixed((w, h)) => (w, h),
-            GridDimensions::Auto => (
-                round::ceil((children.len() as f64).sqrt(), 0) as i32,
-                round::ceil((children.len() as f64).sqrt(), 0) as i32,
-            ),
-        };
+        if children.len() != internal_data.geometry_data.len() {
+            let dims = match public_data.dimensions {
+                GridDimensions::Fixed((w, h)) => (w, h),
+                GridDimensions::Auto => (
+                    round::ceil((children.len() as f64).sqrt(), 0) as usize,
+                    round::ceil((children.len() as f64).sqrt(), 0) as usize,
+                ),
+            };
 
-        let (xstep, ystep) = (zone.size.x / (dims.0 as f32), zone.size.y / (dims.1 as f32));
+            internal_data.dims = dims;
+            internal_data.geometry_data.clear();
+            internal_data.columns_sizes = vec![1.0 / (dims.0 as f32); dims.0];
+            internal_data.rows_sizes = vec![1.0 / (dims.1 as f32); dims.1];
+        }
+
+        if internal_data.dims.0 == 0 || internal_data.dims.1 == 0 {
+            return;
+        }
+
         let mut child_id = 0;
+        let mut cursor = zone.top_left();
 
-        for y in 0..dims.1 {
-            for x in 0..dims.0 {
+        //let mut new_rows_sizes = internal_data.rows_sizes.clone();
+        //let mut new_columns_sizes = internal_data.columns_sizes.clone();
+
+        for y in 0..internal_data.dims.1 {
+            for x in 0..internal_data.dims.0 {
                 if child_id < children.len() {
-                    let childzone = DrawZone::from_rect(
-                        zone.top_left() + Vector2::new((x as f32) * xstep, (y as f32) * ystep),
-                        zone.top_left()
-                            + Vector2::new(((x + 1) as f32) * xstep, ((y + 1) as f32) * ystep),
+                    let childzone_size = Vector2::new(
+                        internal_data.columns_sizes[x] * zone.size.x,
+                        internal_data.rows_sizes[y] * zone.size.y,
                     );
 
-                    let absolute_spacing = childzone.size.norm() * (1.0 - public_data.spacing);
-
-                    let childzone = DrawZone {
-                        m: childzone.m,
-                        size: childzone.size - Vector2::new(absolute_spacing, absolute_spacing),
-                    };
-
-                    let childzone = childzone.constraint_to_aspect(internal_data.aspects[child_id]);
-
-                    children[child_id].as_mut()(childzone);
-
+                    let childzone = DrawZone::from_rect(cursor, cursor + childzone_size);
+                    let __result = draw_with_spacing(
+                        ctx,
+                        &mut children[child_id],
+                        &childzone,
+                        internal_data.spacing,
+                    );
+                    
                     child_id += 1;
+                    cursor.x += childzone_size.x;
+
                 } else {
                     break;
                 }
             }
+
+            cursor.x = zone.top_left().x;
+            cursor.y += internal_data.rows_sizes[y] * zone.size.y;
         }
     }
 }
-*/
+
 // =========================== UTILS ===========================
 
 pub fn components() -> impl Fn(&mut Manager) {
     |manager: &mut Manager| {
-        let split = Box::new(Split { spacer: Spacer {} });
+        let split = Box::new(Split {});
         let spacer = Box::new(Spacer {});
         let grouping_box = Box::new(GroupingBox {});
-        //let grid = Box::new(Grid{});
+        let grid = Box::new(Grid{});
 
         manager.register_component_type(split);
         manager.register_component_type(spacer);
         manager.register_component_type(grouping_box);
-        //manager.register_component_type(grid);
+        manager.register_component_type(grid);
     }
 }

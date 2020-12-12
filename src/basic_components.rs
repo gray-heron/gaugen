@@ -88,11 +88,11 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
         };
 
         let mut smartarc = |p0: f32,
-                        p1: f32,
-                        radius: f32,
-                        stroke_width: f32,
-                        stroke_color: Color,
-                        fill_color: Color| {
+                            p1: f32,
+                            radius: f32,
+                            stroke_width: f32,
+                            stroke_color: Color,
+                            fill_color: Color| {
             let arcstart = p0 * (consts::PI + CGA * 2.0);
             let arcend = (1.0 - p1) * (consts::PI + CGA * 2.0);
 
@@ -108,7 +108,6 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
                     path.fill(fill_color, Default::default());
                     path.stroke(
                         stroke_color,
-                        
                         StrokeOptions {
                             width: stroke_width,
                             ..Default::default()
@@ -198,13 +197,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
         );
     }
 
-    fn init_instance(
-        &self,
-        __ctx: &mut PresentationContext,
-        __data: &RotationalIndicatorData
-    ) {
-        
-    }
+    fn init_instance(&self, __ctx: &mut PresentationContext, __data: &RotationalIndicatorData) {}
 
     fn get_default_data(&self) -> Option<RotationalIndicatorData> {
         Some(RotationalIndicatorData {
@@ -272,11 +265,7 @@ impl Component<TextFieldData, f32> for TextField {
         );
     }
 
-    fn init_instance(
-        &self,
-        ctx: &mut PresentationContext,
-        data: &TextFieldData
-    ) -> f32{
+    fn init_instance(&self, ctx: &mut PresentationContext, data: &TextFieldData) -> f32 {
         let bounds = ctx.frame.text_box_bounds(
             ctx.resources.font,
             (0.0, 0.0),
@@ -368,7 +357,7 @@ impl SpatialSituationIndicator {
         p2: Vector2<f32>,
         path_style: F,
     ) where
-        F: Fn(&nanovg::Path),
+        F: Fn(&mut nanovg::Path),
     {
         match (
             self.projection(p1, o, zoom, 0.97),
@@ -387,7 +376,7 @@ impl SpatialSituationIndicator {
                         );
                         path.move_to(from);
                         path.line_to(to);
-                        path_style(&path);
+                        path_style(path);
                     },
                     Default::default(),
                 );
@@ -473,10 +462,9 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
     fn init_instance(
         &self,
         __ctx: &mut PresentationContext,
-        __data: &SpatialSituationIndicatorData
-    )
-    {}
-    
+        __data: &SpatialSituationIndicatorData,
+    ) {
+    }
     fn draw(
         &self,
         ctx: &mut PresentationContext,
@@ -595,13 +583,105 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+enum GeometryTestType {
+    Line,
+    Circle,
+    Arc(f32, f32),
+}
+
+struct GeometryTester;
+
+impl Component<GeometryTestType, ()> for GeometryTester {
+    fn max_children(&self) -> Option<u32> {
+        Some(0)
+    }
+
+    fn get_name(&self) -> &'static str {
+        "GeometryTester"
+    }
+
+    fn get_default_data(&self) -> Option<GeometryTestType> {
+        Some(GeometryTestType::Line)
+    }
+
+    fn init_instance(&self, __ctx: &mut PresentationContext, __data: &GeometryTestType) {}
+
+    fn draw(
+        &self,
+        ctx: &mut PresentationContext,
+        zone: DrawZone,
+        __children: &mut [DrawChild],
+        __internal_data: &mut (),
+        public_data: &GeometryTestType,
+    ) {
+        match public_data {
+            GeometryTestType::Line => ctx.frame.path(
+                |path| {
+                    path.move_to((zone.m.x, zone.m.y));
+                    path.line_to((zone.m.x + zone.size.x / 4.0, zone.m.y - zone.size.y / 6.0));
+                    path.line_to((zone.m.x - zone.size.x / 4.0, zone.m.y - zone.size.y / 3.0));
+                    path.line_to((zone.m.x, zone.m.y + zone.size.y / 3.0));
+
+                    path.stroke(
+                        Color::from_rgba(0xa0, 0xa0, 0xa0, 0xa0),
+                        StrokeOptions {
+                            width: 3.0,
+                            ..Default::default()
+                        },
+                    );
+                },
+                Default::default(),
+            ),
+            GeometryTestType::Circle => ctx.frame.path(
+                |path| {
+                    path.circle(
+                        (zone.m.x - zone.size.x / 4.0, zone.m.y - zone.size.y / 3.0),
+                        zone.size.x / 5.0,
+                    );
+
+                    path.stroke(
+                        Color::from_rgba(0xa0, 0xa0, 0xa0, 0xa0),
+                        StrokeOptions {
+                            width: 3.0,
+                            ..Default::default()
+                        },
+                    );
+                },
+                Default::default(),
+            ),
+            GeometryTestType::Arc(begin, end) =>  ctx.frame.path(|path| {
+                path.arc(
+                    (zone.m.x, zone.m.y),
+                    zone.size.x / 3.0,
+                    *begin,
+                    *end,
+                    Winding::Direction(Direction::CounterClockwise),
+                );
+
+                path.stroke(
+                    Color::from_rgba(0xa0, 0xa0, 0xa0, 0xa0),
+                    StrokeOptions {
+                        width: 3.0,
+                        ..Default::default()
+                    },
+                );
+            },
+            Default::default()),
+        };
+    }
+}
+
 pub fn components() -> impl Fn(&mut Manager) {
     |manager: &mut Manager| {
         let rt = Box::new(RotationalIndicator {});
         let ssi = Box::new(SpatialSituationIndicator {});
         let textfield = Box::new(TextField {});
+        let geometry_tester = Box::new(GeometryTester {});
+
         manager.register_component_type(rt);
         manager.register_component_type(textfield);
         manager.register_component_type(ssi);
+        manager.register_component_type(geometry_tester);
     }
 }

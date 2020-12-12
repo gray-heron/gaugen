@@ -7,7 +7,7 @@ use std::time::Instant;
 use nanovg::{*};
 use std::cell::RefCell;
 
-const INIT_WINDOW_SIZE: (u32, u32) = (800, 800);
+const INIT_WINDOW_SIZE: (u32, u32) = (1800, 1800);
 
 
 fn get_elapsed_time(instant: &Instant) -> f32 {
