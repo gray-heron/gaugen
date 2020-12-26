@@ -98,6 +98,7 @@ pub struct Split;
 struct SplitInternalData {
     aspects: Vec<f32>,
     primary_width: f32,
+    primary_aspect: f32
 }
 
 impl SplitInstance {
@@ -161,6 +162,7 @@ impl Component<SplitInstance, SplitInternalData> for Split {
         SplitInternalData {
             aspects: Vec::new(),
             primary_width: 0.0,
+            primary_aspect: 1.0
         }
     }
 
@@ -180,8 +182,10 @@ impl Component<SplitInstance, SplitInternalData> for Split {
         internal_data: &mut SplitInternalData,
         data: &SplitInstance,
     ) {
+        let zone = zone.constraint_to_aspect((zone.aspect() *internal_data.primary_aspect).sqrt());
         let mut new_aspects = Vec::new();
         let mut new_primary_width = 0.0;
+        let mut new_total_aspect = 0.0;
 
         if internal_data.aspects.len() != children.len() {
             internal_data.primary_width = 0.0;
@@ -213,9 +217,11 @@ impl Component<SplitInstance, SplitInternalData> for Split {
                 let result = draw_with_spacing(ctx, &mut children[i], &zone, data.spacing);
 
                 let new_aspect = data.aspect_to_primary_to_secondary(result.aspect());
+                new_total_aspect += new_aspect;
                 new_aspects.push(new_aspect);
                 new_primary_width += new_aspect;
                 primary_cursor += internal_data.aspects[i] * space_per_unit;
+
             }
         } else {
             panic!();
@@ -231,6 +237,12 @@ impl Component<SplitInstance, SplitInternalData> for Split {
 
         internal_data.aspects = new_aspects;
         internal_data.primary_width = new_primary_width;
+
+        if data.direction == SplitDirection::Horizontal {
+            internal_data.primary_aspect = new_total_aspect
+        } else {
+            internal_data.primary_aspect = 1.0 / new_total_aspect
+        }
     }
 }
 
@@ -251,7 +263,7 @@ pub struct GroupingBoxData {
 
 pub struct GroupingBox {}
 
-impl Component<GroupingBoxData, ()> for GroupingBox {
+impl Component<GroupingBoxData, Option<f32>> for GroupingBox {
     // primary dimension = along split direction
     fn max_children(&self) -> Option<u32> {
         Some(1)
@@ -269,17 +281,28 @@ impl Component<GroupingBoxData, ()> for GroupingBox {
         })
     }
 
-    fn init_instance(&self, __ctx: &mut frontend::PresentationContext, __data: &GroupingBoxData) {}
+    fn init_instance(
+        &self,
+        __ctx: &mut frontend::PresentationContext,
+        __data: &GroupingBoxData,
+    ) -> Option<f32> {
+        None
+    }
 
     fn draw(
         &self,
         ctx: &mut frontend::PresentationContext,
         zone: DrawZone,
         children: &mut [DrawChild],
-        internal_data: &mut (),
+        last_aspect: &mut Option<f32>,
         public_data: &GroupingBoxData,
     ) {
         let ref palette = ctx.resources.palette;
+
+        let zone = match last_aspect {
+            None => zone,
+            Some(aspect) => zone.constraint_to_aspect((*aspect * zone.aspect()).sqrt()),
+        };
 
         let title_height = match public_data.title_size {
             GroupingBoxTitleSize::RelativeToHeight(height) => zone.size.y * height,
@@ -358,7 +381,7 @@ impl Component<GroupingBoxData, ()> for GroupingBox {
             Default::default(),
         );
 
-        children[0].as_mut()(ctx, child_zone);
+        *last_aspect = Some(children[0].as_mut()(ctx, child_zone).aspect());
     }
 }
 
@@ -386,9 +409,17 @@ pub enum GridDimensions {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub enum GridLayoutStrategy {
+    Static,
+    MinimizeWastedSpace,
+    EqualUsedSpace,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct GridData {
     pub spacing: f32,
     pub dimensions: GridDimensions,
+    pub layout_strategy: GridLayoutStrategy,
 }
 
 pub struct Grid {}
@@ -398,7 +429,7 @@ struct GridInternalData {
     dims: (usize, usize),
     rows_sizes: Vec<f32>,
     columns_sizes: Vec<f32>,
-    spacing: f32
+    spacing: f32,
 }
 
 impl GridInternalData {
@@ -496,20 +527,21 @@ impl Component<GridData, GridInternalData> for Grid {
         Some(GridData {
             spacing: 0.9,
             dimensions: GridDimensions::Auto,
+            layout_strategy: GridLayoutStrategy::MinimizeWastedSpace,
         })
     }
 
     fn init_instance(
         &self,
         __ctx: &mut frontend::PresentationContext,
-        data: &GridData,
+        __data: &GridData,
     ) -> GridInternalData {
         GridInternalData {
             geometry_data: Vec::new(),
             dims: (0, 0),
             columns_sizes: Vec::new(),
             rows_sizes: Vec::new(),
-            spacing: 0.9
+            spacing: 0.9,
         }
     }
 
@@ -521,15 +553,15 @@ impl Component<GridData, GridInternalData> for Grid {
         internal_data: &mut GridInternalData,
         public_data: &GridData,
     ) {
-        if children.len() != internal_data.geometry_data.len() {
-            let dims = match public_data.dimensions {
-                GridDimensions::Fixed((w, h)) => (w, h),
-                GridDimensions::Auto => (
-                    round::ceil((children.len() as f64).sqrt(), 0) as usize,
-                    round::ceil((children.len() as f64).sqrt(), 0) as usize,
-                ),
-            };
+        let dims = match public_data.dimensions {
+            GridDimensions::Fixed((w, h)) => (w, h),
+            GridDimensions::Auto => (
+                round::ceil((children.len() as f64).sqrt(), 0) as usize,
+                round::ceil((children.len() as f64).sqrt(), 0) as usize,
+            ),
+        };
 
+        if internal_data.dims != dims {
             internal_data.dims = dims;
             internal_data.geometry_data.clear();
             internal_data.columns_sizes = vec![1.0 / (dims.0 as f32); dims.0];
@@ -543,8 +575,11 @@ impl Component<GridData, GridInternalData> for Grid {
         let mut child_id = 0;
         let mut cursor = zone.top_left();
 
-        //let mut new_rows_sizes = internal_data.rows_sizes.clone();
-        //let mut new_columns_sizes = internal_data.columns_sizes.clone();
+        let mut new_columns_sizes = vec![0.0; internal_data.dims.0];
+        let mut new_rows_sizes = vec![0.0; internal_data.dims.1];
+
+        let mut new_rows_total_size = 0.0;
+        let mut new_columns_total_size = 0.0;
 
         for y in 0..internal_data.dims.1 {
             for x in 0..internal_data.dims.0 {
@@ -555,16 +590,27 @@ impl Component<GridData, GridInternalData> for Grid {
                     );
 
                     let childzone = DrawZone::from_rect(cursor, cursor + childzone_size);
-                    let __result = draw_with_spacing(
+                    let result = draw_with_spacing(
                         ctx,
                         &mut children[child_id],
                         &childzone,
                         internal_data.spacing,
                     );
-                    
+
+                    if result.aspect() > childzone.aspect() {
+                        // we are wasting vertical space
+                        new_rows_sizes[y] +=
+                            internal_data.rows_sizes[y] * childzone.aspect() / result.aspect();
+                        new_columns_sizes[x] += internal_data.columns_sizes[x];
+                    } else {
+                        // we are wasting vertical space
+                        new_columns_sizes[x] +=
+                            internal_data.columns_sizes[x] * result.aspect() / childzone.aspect();
+                        new_rows_sizes[y] += internal_data.rows_sizes[y];
+                    }
+
                     child_id += 1;
                     cursor.x += childzone_size.x;
-
                 } else {
                     break;
                 }
@@ -573,6 +619,25 @@ impl Component<GridData, GridInternalData> for Grid {
             cursor.x = zone.top_left().x;
             cursor.y += internal_data.rows_sizes[y] * zone.size.y;
         }
+
+        for y in 0..internal_data.dims.1 {
+            new_rows_total_size += new_rows_sizes[y];
+        }
+
+        for x in 0..internal_data.dims.0 {
+            new_columns_total_size += new_columns_sizes[x];
+        }
+
+        for y in 0..internal_data.dims.1 {
+            new_rows_sizes[y] /= new_rows_total_size;
+        }
+
+        for x in 0..internal_data.dims.0 {
+            new_columns_sizes[x] /= new_columns_total_size;
+        }
+
+        internal_data.columns_sizes = new_columns_sizes;
+        internal_data.rows_sizes = new_rows_sizes;
     }
 }
 
@@ -583,7 +648,7 @@ pub fn components() -> impl Fn(&mut Manager) {
         let split = Box::new(Split {});
         let spacer = Box::new(Spacer {});
         let grouping_box = Box::new(GroupingBox {});
-        let grid = Box::new(Grid{});
+        let grid = Box::new(Grid {});
 
         manager.register_component_type(split);
         manager.register_component_type(spacer);

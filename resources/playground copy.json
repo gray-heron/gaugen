@@ -1,81 +1,142 @@
 {
     "type": "Split",
     "data": {
-        "direction": "Vertical"
+        "spacing": 0.95,
+        "direction": "Horizontal",
+        "mode": "EqualSide"
     },
     "children": [
         {
-            "type": "TextField"
-        },
-        {
             "type": "Split",
             "data": {
-                "direction": "Horizontal"
+                "spacing": 0.9,
+                "direction": "Vertical",
+                "mode": "EqualSide"
             },
             "children": [
                 {
-                    "type": "GroupingBox",
+                    "type": "SpatialSituationIndicator",
+                    "name": "ssi",
                     "data": {
-                        "title": "Demo",
-                        "spacing": 1.0,
-                        "title_size": {
-                            "RelativeToHeight": 0.2
-                        }
-                    },
-                    "children": [
-                        {
-                            "type": "Split",
-                            "data": {
-                                "direction": "Vertical"
-                            },
-                            "children": [
-                                {
-                                    "type": "TextField",
-                                    "name": "my_textfield",
-                                    "data": {
-                                        "text": "Hello world!"
-                                    }
-                                },
-                                {
-                                    "type": "TextField"
-                                },
-                                {
-                                    "type": "RotationalIndicator",
-                                    "name": "my_indicator"
-                                }
-                            ]
-                        }
-                    ]
+                        "projection_zoom": 2.0
+                    }
                 },
                 {
                     "type": "GroupingBox",
                     "data": {
-                        "spacing": 1.0,
-                        "title": "Demo",
+                        "spacing": 0.95,
+                        "title": "",
                         "title_size": {
-                            "Absolute": 85
+                            "Absolute": 0.0
                         }
                     },
                     "children": [
                         {
                             "type": "Split",
-                            "data": {
-                                "direction": "Vertical"
-                            },
                             "children": [
                                 {
-                                    "type": "TextField",
-                                    "name": "my_textfield",
+                                    "type": "RotationalIndicator",
+                                    "name": "speed",
                                     "data": {
-                                        "text": "Hello world!"
+                                        "precision": 0,
+                                        "unit": "",
+                                        "caption": "SPEED",
+                                        "value": 130,
+                                        "value_min": 4.0,
+                                        "value_ranges": [
+                                            [
+                                                20,
+                                                "Ok"
+                                            ],
+                                            [
+                                                100,
+                                                "Error"
+                                            ],
+                                            [
+                                                140,
+                                                "Warning"
+                                            ],
+                                            [
+                                                290,
+                                                "Ok"
+                                            ],
+                                            [
+                                                330,
+                                                "Error"
+                                            ]
+                                        ]
                                     }
                                 },
                                 {
-                                    "type": "TextField"
+                                    "type": "RotationalIndicator",
+                                    "name": "alt",
+                                    "data": {
+                                        "precision": 2,
+                                        "unit": "",
+                                        "caption": "ALT",
+                                        "value": 0.0,
+                                        "value_min": 0.0,
+                                        "value_ranges": [
+                                            [
+                                                0.5,
+                                                "Warning"
+                                            ],
+                                            [
+                                                11.0,
+                                                "Ok"
+                                            ],
+                                            [
+                                                13.0,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
                                 },
                                 {
                                     "type": "RotationalIndicator",
-                                    "name": "my_indicator"
+                                    "name": "flaps",
+                                    "data": {
+                                        "precision": 0,
+                                        "unit": "",
+                                        "caption": "FLAPS",
+                                        "value": 30,
+                                        "value_min": 0.0,
+                                        "value_ranges": [
+                                            [
+                                                40.1,
+                                                "Ok"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "volt",
+                                    "data": {
+                                        "precision": 1,
+                                        "unit": "V",
+                                        "caption": "MAIN BUS",
+                                        "value": 24.1,
+                                        "value_min": 12.0,
+                                        "value_ranges": [
+                                            [
+                                                20.0,
+                                                "Error"
+                                            ],
+                                            [
+                                                23.0,
+                                                "Warning"
+                                            ],
+                                            [
+                                                28.0,
+                                                "Ok"
+                                            ],
+                                            [
+                                                36,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
                                 }
                             ]
                         }
@@ -84,7 +145,344 @@
             ]
         },
         {
-            "type": "TextField"
+            "type": "Split",
+            "data": {
+                "spacing": 0.95,
+                "direction": "Vertical",
+                "mode": "EqualSide"
+            },
+            "children": [ 
+                {
+                    "type": "GroupingBox",
+                    "data": {
+                        "spacing": 0.95,
+                        "title": "SYSTEMS",
+                        "title_size": {
+                            "Absolute": 35.0
+                        }
+                    },
+                    "children": [
+                        {
+                            "type": "Grid",
+                            "data": {
+                                "spacing": 0.95,
+                                "dimensions": {
+                                    "Fixed": [
+                                        2,
+                                        4
+                                    ]
+                                }
+                            },
+                            "children": [
+                                {
+                                    "type": "TextField",
+                                    "data": {
+                                        "text": "APU-AS",
+                                        "back_color": "ff000000"
+                                    }
+                                },
+                                {
+                                    "type": "TextField",
+                                    "data": {
+                                        "text": "BATT",
+                                        "back_color": "ff008f00",
+                                        "front_color": "ff000000"
+                                    }
+                                },
+                                {
+                                    "type": "TextField",
+                                    "data": {
+                                        "text": "BUS1",
+                                        "back_color": "ff008f00",
+                                        "front_color": "ff000000"
+                                    }
+                                },
+                                {
+                                    "type": "TextField",
+                                    "data": {
+                                        "text": "BUS2",
+                                        "back_color": "ff008f00",
+                                        "front_color": "ff000000"
+                                    }
+                                },
+                                {
+                                    "type": "TextField",
+                                    "name": "gear",
+                                    "data": {
+                                        "text": "GEAR",
+                                        "back_color": "ff008f00",
+                                        "front_color": "ff000000"
+                                    }
+                                },
+                                {
+                                    "type": "TextField",
+                                    "data": {
+                                        "text": "RADAR",
+                                        "back_color": "ff008f00",
+                                        "front_color": "ff000000"
+                                    }
+                                },
+                                {
+                                    "type": "TextField",
+                                    "data": {
+                                        "text": "STEER",
+                                        "back_color": "ff000000"
+                                    }
+                                },
+                                {
+                                    "type": "TextField",
+                                    "data": {
+                                        "text": "BRAKE",
+                                        "back_color": "ff000000"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "GroupingBox",
+                    "data": {
+                        "spacing": 0.95,
+                        "title": "ENGINES",
+                        "title_size": {
+                            "Absolute": 35.0
+                        }
+                    },
+                    "children": [
+                        {
+                            "type": "Grid",
+                            "data": {
+                                "spacing": 0.9,
+                                "dimensions": {
+                                    "Fixed": [
+                                        2,
+                                        4
+                                    ]
+                                }
+                            },
+                            "children": [
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "e11",
+                                    "data": {
+                                        "precision": 1,
+                                        "unit": "",
+                                        "caption": "L THRUST",
+                                        "value": 0,
+                                        "value_min": -0.1,
+                                        "value_ranges": [
+                                            [
+                                                38,
+                                                "Ok"
+                                            ],
+                                            [
+                                                40,
+                                                "Warning"
+                                            ],
+                                            [
+                                                45,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "e21",
+                                    "data": {
+                                        "precision": 1,
+                                        "unit": "",
+                                        "caption": "R THRUST",
+                                        "value": 0,
+                                        "value_min": -0.1,
+                                        "value_ranges": [
+                                            [
+                                                38,
+                                                "Ok"
+                                            ],
+                                            [
+                                                40,
+                                                "Warning"
+                                            ],
+                                            [
+                                                45,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "e12",
+                                    "data": {
+                                        "precision": 0,
+                                        "unit": "°C",
+                                        "caption": "L TEMP",
+                                        "value": 0,
+                                        "value_min": -0.1,
+                                        "value_ranges": [
+                                            [
+                                                680,
+                                                "Ok"
+                                            ],
+                                            [
+                                                700,
+                                                "Warning"
+                                            ],
+                                            [
+                                                800,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "e22",
+                                    "data": {
+                                        "precision": 0,
+                                        "unit": "°C",
+                                        "caption": "R TEMP",
+                                        "value": 0,
+                                        "value_min": -0.1,
+                                        "value_ranges": [
+                                            [
+                                                680,
+                                                "Ok"
+                                            ],
+                                            [
+                                                700,
+                                                "Warning"
+                                            ],
+                                            [
+                                                800,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "e13",
+                                    "data": {
+                                        "precision": 0,
+                                        "unit": "",
+                                        "caption": "L RPM",
+                                        "value": 0,
+                                        "value_min": -0.1,
+                                        "value_ranges": [
+                                            [
+                                                900.0,
+                                                "Error"
+                                            ],
+                                            [
+                                                1000.0,
+                                                "Warning"
+                                            ],
+                                            [
+                                                4100,
+                                                "Ok"
+                                            ],
+                                            [
+                                                4400,
+                                                "Warning"
+                                            ],
+                                            [
+                                                5500,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "e23",
+                                    "data": {
+                                        "precision": 0,
+                                        "unit": "",
+                                        "caption": "R RPM",
+                                        "value": 0,
+                                        "value_min": -0.1,
+                                        "value_ranges": [
+                                            [
+                                                900.0,
+                                                "Error"
+                                            ],
+                                            [
+                                                1000.0,
+                                                "Warning"
+                                            ],
+                                            [
+                                                4100,
+                                                "Ok"
+                                            ],
+                                            [
+                                                4400,
+                                                "Warning"
+                                            ],
+                                            [
+                                                5500,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "e14",
+                                    "data": {
+                                        "precision": 0,
+                                        "unit": "",
+                                        "caption": "L FLOW",
+                                        "value": 0,
+                                        "value_min": -0.1,
+                                        "value_ranges": [
+                                            [
+                                                100.0,
+                                                "Error"
+                                            ],
+                                            [
+                                                1700.0,
+                                                "Ok"
+                                            ],
+                                            [
+                                                2500,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
+                                },
+                                {
+                                    "type": "RotationalIndicator",
+                                    "name": "e24",
+                                    "data": {
+                                        "precision": 0,
+                                        "unit": "",
+                                        "caption": "R FLOW",
+                                        "value": 0,
+                                        "value_min": -0.1,
+                                        "value_ranges": [
+                                            [
+                                                100.0,
+                                                "Error"
+                                            ],
+                                            [
+                                                1700.0,
+                                                "Ok"
+                                            ],
+                                            [
+                                                2500,
+                                                "Error"
+                                            ]
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
         }
     ]
 }

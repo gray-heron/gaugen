@@ -61,6 +61,7 @@ type WrappedDraw = Box<
         &serde_json::Map<String, serde_json::Value>,
     ),
 >;
+
 pub type Hooks = HashMap<String, serde_json::Map<String, serde_json::Value>>;
 pub type View = TreeComponent;
 
@@ -207,6 +208,7 @@ impl Manager {
                   json: &serde_json::Value,
                   children_n: usize|
                   -> Option<WrappedDraw> {
+                
                 let __stored_component2 = rc::Rc::clone(&__stored_component);
 
                 let data = match TComponentData::deserialize(json) {

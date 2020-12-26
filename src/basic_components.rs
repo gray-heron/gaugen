@@ -70,7 +70,7 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
         let ref palette = ctx.resources.palette;
         let ref mut frame = ctx.frame;
 
-        let zone = zone.constraint_to_aspect(Some(1.15));
+        let zone = zone.constraint_to_aspect(1.15);
         let base_radius = zone.size.x / 2.4;
         let base_thickness = base_radius / 10.0;
         let ymo = base_radius / -5.5; //y middle offset
@@ -221,41 +221,89 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
 
 // =========================== TEXT FIELD ===========================
 
+#[derive(Clone)]
+pub struct TextFieldInternalData {
+    pub aspect: f32,
+    pub last_text: String
+}
+
+impl TextFieldInternalData {
+    pub fn update_aspect(&mut self, ctx: &mut PresentationContext, text: &String){
+        if *text != self.last_text {
+            let bounds = ctx.frame.text_box_bounds(
+                ctx.resources.font,
+                (0.0, 0.0),
+                text.as_str(),
+                nanovg::TextOptions::default(),
+            );
+    
+            let w = bounds.max_x - bounds.min_x;
+            let h = bounds.max_y - bounds.min_y;
+    
+            self.aspect = w / h;
+            self.last_text = text.clone();
+        }
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub enum TextFieldSize {
+    Auto,
+    FixedFontSize(f32)
+}
+
 pub struct TextField {}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct TextFieldData {
     pub text: String,
+    pub size: TextFieldSize,
     pub front_color: SerializableColor,
     pub back_color: SerializableColor,
 }
 
-impl Component<TextFieldData, f32> for TextField {
+impl Component<TextFieldData, TextFieldInternalData> for TextField {
     fn draw(
         &self,
         ctx: &mut PresentationContext,
         zone: DrawZone,
         __children: &mut [DrawChild],
-        aspect: &mut f32,
+        internal_data: &mut TextFieldInternalData,
         data: &TextFieldData,
     ) {
-        let zone = zone.constraint_to_aspect(Some(*aspect));
+        let text_opts = match &data.size {
+            TextFieldSize::FixedFontSize(size) => {
+                TextOptions {
+                    color: data.front_color.color,
+                    size: *size,
+                    align: Alignment::new().left().middle(),
+                    ..Default::default()
+                }
+            },
+            _ => {
+                internal_data.update_aspect(ctx, &data.text);
+                let zone = zone.constraint_to_aspect(internal_data.aspect);
+
+                TextOptions {
+                    color: data.front_color.color,
+                    align: Alignment::new().left().middle(),
+                    size: zone.size.y,
+                    line_height: zone.size.y,
+                    line_max_width: zone.size.x * internal_data.aspect,
+                    ..Default::default()
+                }
+            }
+        };
+        
+        let bounds = ctx.frame.text_box_bounds(ctx.resources.font, (zone.left(), zone.m.y), &data.text, text_opts);
 
         ctx.frame.path(
             |path| {
-                path.rect((zone.left(), zone.top()), (zone.size.x, zone.size.y));
+                path.rect((bounds.min_x, bounds.min_y), (bounds.max_x - bounds.min_x, bounds.max_y - bounds.min_y));
                 path.fill(data.back_color.color, Default::default());
             },
             Default::default(),
         );
-        let text_opts = TextOptions {
-            color: data.front_color.color,
-            size: zone.size.y * 1.0,
-            align: Alignment::new().center().middle(),
-            line_height: zone.size.y * 1.0,
-            line_max_width: zone.size.x * 1.0,
-            ..Default::default()
-        };
 
         ctx.frame.text_box(
             ctx.resources.font,
@@ -265,23 +313,20 @@ impl Component<TextFieldData, f32> for TextField {
         );
     }
 
-    fn init_instance(&self, ctx: &mut PresentationContext, data: &TextFieldData) -> f32 {
-        let bounds = ctx.frame.text_box_bounds(
-            ctx.resources.font,
-            (0.0, 0.0),
-            data.text.as_str(),
-            nanovg::TextOptions::default(),
-        );
+    fn init_instance(&self, ctx: &mut PresentationContext, data: &TextFieldData) -> TextFieldInternalData {
+        let mut internal_data = TextFieldInternalData{
+            last_text: "".to_string(),
+            aspect: 1.0
+        };
 
-        let w = bounds.max_x - bounds.min_x;
-        let h = bounds.max_y - bounds.min_y;
-
-        w / h
+        internal_data.update_aspect(ctx, &data.text);
+        internal_data
     }
 
     fn get_default_data(&self) -> Option<TextFieldData> {
         Some(TextFieldData {
             text: "<Placeholder>".to_string(),
+            size: TextFieldSize::Auto,
             front_color: SerializableColor {
                 color: Color::from_rgb(0x80, 0x80, 0x80),
             },
@@ -473,6 +518,7 @@ impl Component<SpatialSituationIndicatorData, ()> for SpatialSituationIndicator 
         __internal_data: &mut (),
         public_data: &SpatialSituationIndicatorData,
     ) {
+        let zone = zone.constraint_to_aspect(1.0);
         let orientation = Vector3::new(public_data.roll, public_data.pitch, public_data.yaw);
 
         let orientation_quat =

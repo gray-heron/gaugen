@@ -7,7 +7,7 @@ use std::time::Instant;
 use nanovg::{*};
 use std::cell::RefCell;
 
-const INIT_WINDOW_SIZE: (u32, u32) = (1800, 1800);
+const INIT_WINDOW_SIZE: (u32, u32) = (800, 800);
 
 
 fn get_elapsed_time(instant: &Instant) -> f32 {
@@ -165,7 +165,7 @@ impl Session<'_> {
 
             let mut ctx = frontend::PresentationContext {
                 frame: frame,
-                time: get_elapsed_time(__time),
+                time: 0.0, //get_elapsed_time(__time),
                 resources: res,
                 shell_stack: vec!{DrawZone::new_empty()}
             };
