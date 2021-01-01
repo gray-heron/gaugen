@@ -1,19 +1,19 @@
 pub mod basic_components;
 pub mod frontend;
 pub mod geometry_components;
-pub mod session;
 mod helpers;
+pub mod session;
 
 use nalgebra::Vector2;
+use nanovg::{Color, DrawZone, StrokeOptions};
 use serde;
 use serde_json;
+use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::rc;
-use nanovg::{DrawZone, Color, StrokeOptions};
-use std::cell::RefCell;
-
-//RunTime Parametric Structures
+use typed_arena::Arena;
 
 pub struct ControlGeometry {
     pub aspect: Option<f32>,
@@ -45,57 +45,91 @@ where
     );
 }
 
-type WrappedInit = Box<
-    dyn Fn(
-        &mut frontend::PresentationContext,
-        &serde_json::Value,
-        usize,
-    ) -> Option<WrappedDraw>,
->;
-
-type WrappedDraw = Box<
-    dyn FnMut(
-        &mut frontend::PresentationContext,
-        DrawZone,
-        &mut [DrawChild],
-        &serde_json::Map<String, serde_json::Value>,
-    ),
->;
-
 pub type Hooks = HashMap<String, serde_json::Map<String, serde_json::Value>>;
-pub type View = TreeComponent;
 
-pub struct TreeComponent {
-    children: Vec<TreeComponent>,
-    draw: WrappedDraw,
-    name: Option<String>
+pub struct View<'a> {
+    components: Arena<RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>>,
 }
 
-impl TreeComponent {
-    fn shell_merge_bottom(stack: &mut Vec<DrawZone>, zone: &DrawZone) -> DrawZone {
-        stack.last_mut().unwrap().convex_with_a_zone(zone);
-        *stack.last().unwrap()
+impl<'a> View<'a> {
+    pub fn draw(
+        &mut self,
+        ctx: &mut frontend::PresentationContext,
+        zone: DrawZone,
+        hooks: &Hooks,
+        layers: &RefCell<Vec<DrawZone>>,
+    ) {
     }
+}
 
-    pub fn draw(&mut self, ctx: &mut frontend::PresentationContext, zone: DrawZone, hooks: &Hooks, layers: &RefCell<Vec<DrawZone>>) {
-        let mut draws: Vec<Box<dyn FnMut(&mut frontend::PresentationContext, DrawZone) -> DrawZone>> =
-            Vec::new();
+trait AbstractTreeComponent<'a> {
+    fn draw(
+        &mut self,
+        ctx: &mut frontend::PresentationContext,
+        zone: DrawZone,
+        hooks: &Hooks,
+        layers: &RefCell<Vec<DrawZone>>,
+    );
 
-        for child in &mut self.children {
+    fn add_child(&mut self, child: &'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>);
+}
 
+pub struct Manager {
+    controls_types: HashMap<&'static str, Box<dyn AbstractComponentFactory>>,
+}
+
+struct ComponentInstance<'a, TPublicData, TInternalData>
+where
+    TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
+    TInternalData: 'static,
+{
+    pub public_data: TPublicData,
+    pub internal_data: TInternalData,
+    pub children: Vec<&'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>>,
+    pub component_type: std::rc::Rc<Box<dyn Component<TPublicData, TInternalData>>>,
+    pub name: Option<String>,
+}
+
+fn shell_merge_bottom(stack: &mut Vec<DrawZone>, zone: &DrawZone) -> DrawZone {
+    stack.last_mut().unwrap().convex_with_a_zone(zone);
+    *stack.last().unwrap()
+}
+
+impl<'a, TPublicData, TInternalData> AbstractTreeComponent<'a>
+    for ComponentInstance<'a, TPublicData, TInternalData>
+where
+    TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
+    TInternalData: 'static,
+{
+    fn draw(
+        &mut self,
+        ctx: &mut frontend::PresentationContext,
+        zone: DrawZone,
+        hooks: &Hooks,
+        layers: &RefCell<Vec<DrawZone>>,
+    ) {
+        let mut draws: Vec<
+            Box<dyn FnMut(&mut frontend::PresentationContext, DrawZone) -> DrawZone>,
+        > = Vec::new();
+
+        for child in &self.children {
             let b = Box::new(
                 move |ctx: &mut frontend::PresentationContext, z: DrawZone| -> DrawZone {
-                    TreeComponent::shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
+                    let mut child = child.borrow_mut();
+                    shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
                     ctx.shell_stack.push(DrawZone::new_empty());
 
                     child.draw(ctx, z, hooks, layers);
 
-                    let drawn = TreeComponent::shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
+                    let drawn =
+                        shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
                     ctx.shell_stack.pop();
-                    ctx.shell_stack.last_mut().unwrap().convex_with_a_zone(&drawn);
+                    ctx.shell_stack
+                        .last_mut()
+                        .unwrap()
+                        .convex_with_a_zone(&drawn);
 
                     layers.borrow_mut().push(drawn);
-                    
                     drawn
                 },
             );
@@ -112,13 +146,79 @@ impl TreeComponent {
             None => &no_hooks,
         };
 
-        self.draw.as_mut()(ctx, zone, &mut draws[..], my_hooks);
-        TreeComponent::shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
+        self.component_type.as_ref().draw(
+            ctx,
+            zone,
+            &mut draws[..],
+            &mut self.internal_data,
+            &self.public_data,
+        );
+        shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
+    }
+
+    fn add_child(&mut self, child: &'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>) {
+        self.children.push(child);
     }
 }
 
-pub struct Manager {
-    controls_types: HashMap<&'static str, WrappedInit>,
+trait AbstractComponentFactory {
+    fn make_component<'a>(
+        &self,
+        ctx: &mut frontend::PresentationContext,
+        json: &serde_json::Value,
+        children: Vec<&'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>>,
+    ) -> Option<Box<dyn AbstractTreeComponent<'a> + 'a>>;
+}
+
+struct ConcreteComponentFactory<TPublicData, TInternalData>
+where
+    TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
+    TInternalData: 'static,
+{
+    pub component_type: std::rc::Rc<Box<dyn Component<TPublicData, TInternalData>>>,
+}
+
+impl<TPublicData, TInternalData> AbstractComponentFactory
+    for ConcreteComponentFactory<TPublicData, TInternalData>
+where
+    TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
+    TInternalData: 'static,
+{
+    fn make_component<'a>(
+        &self,
+        ctx: &mut frontend::PresentationContext,
+        json: &serde_json::Value,
+        children: Vec<&'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>>,
+    ) -> Option<Box<dyn AbstractTreeComponent<'a> + 'a>> {
+        let public_data = match TPublicData::deserialize(json) {
+            Ok(data) => data,
+            Err(_) => {
+                let default_data = self.component_type.as_ref().get_default_data()?;
+                match json.as_object() {
+                    Some(hooks) => Manager::join_hooks(&default_data, hooks),
+                    None => default_data,
+                }
+            }
+        };
+
+        let private_data = self
+            .component_type
+            .as_ref()
+            .init_instance(ctx, &public_data);
+
+        let name = match json["name"].as_str() {
+            Some(s) => Some(s.to_string()),
+            None => None,
+        };
+
+        Some(Box::new(ComponentInstance {
+            public_data: public_data,
+            internal_data: private_data,
+            children: children,
+            component_type: self.component_type.clone(),
+            name: name,
+        }))
+    }
 }
 
 impl Manager {
@@ -144,55 +244,6 @@ impl Manager {
         }
     }
 
-    fn mk_init<T1, T2>(
-        ctx: &mut frontend::PresentationContext,
-        component_type: std::rc::Rc<Box<dyn Component<T1, T2>>>, // fixme Rc<Box> => Rc
-        children_n: usize,
-        public_data: T1,
-        size_preference: f32,
-    ) -> WrappedDraw
-    where
-        T1: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
-        T2: 'static,
-    {
-        let mut internal_data = component_type
-            .as_ref()
-            .as_ref()
-            .init_instance(ctx, &public_data);
-
-        match component_type.max_children() {
-            Some(max) => assert!(children_n <= (max as usize)),
-            None => {}
-        }
-
-        Box::new(
-            move |ctx: &mut frontend::PresentationContext,
-                  zone: DrawZone,
-                  children: &mut [DrawChild],
-                  my_hooks: &serde_json::Map<String, serde_json::Value>| {
-                if my_hooks.len() == 0 {
-                    component_type.as_ref().as_ref().draw(
-                        ctx,
-                        zone,
-                        children,
-                        &mut internal_data,
-                        &public_data,
-                    );
-                } else {
-                    let merged_data = Manager::join_hooks(&public_data, my_hooks);
-
-                    component_type.as_ref().as_ref().draw(
-                        ctx,
-                        zone,
-                        children,
-                        &mut internal_data,
-                        &merged_data,
-                    );
-                }
-            },
-        )
-    }
-
     pub fn register_component_type<TComponentData, TPrivateComponentData>(
         &mut self,
         component: Box<dyn Component<TComponentData, TPrivateComponentData>>,
@@ -200,88 +251,87 @@ impl Manager {
         TComponentData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
         TPrivateComponentData: 'static,
     {
-        let stored_component = rc::Rc::new(component);
-        let __stored_component = rc::Rc::clone(&stored_component);
+        let component = rc::Rc::new(component);
 
-        let mk_wrapped_init = Box::new(
-            move |ctx: &mut frontend::PresentationContext,
-                  json: &serde_json::Value,
-                  children_n: usize|
-                  -> Option<WrappedDraw> {
-                
-                let __stored_component2 = rc::Rc::clone(&__stored_component);
-
-                let data = match TComponentData::deserialize(json) {
-                    Ok(data) => data,
-                    Err(_) => {
-                        let default_data = __stored_component.as_ref().get_default_data()?;
-                        match json.as_object() {
-                            Some(hooks) => Manager::join_hooks(&default_data, hooks),
-                            None => default_data,
-                        }
-                    }
-                };
-
-                Some(Manager::mk_init(
-                    ctx,
-                    __stored_component2,
-                    children_n,
-                    data,
-                    1.0,
-                ))
-            },
-        );
+        let component_factory = Box::new(ConcreteComponentFactory {
+            component_type: component.clone(),
+        });
 
         self.controls_types
-            .insert(stored_component.as_ref().get_name(), mk_wrapped_init);
+            .insert(component.as_ref().get_name(), component_factory);
     }
 
-    pub fn make_screen(
+    pub fn make_screen<'a>(
         &self,
         ctx: &mut frontend::PresentationContext,
         path_to_json: &str,
-    ) -> Option<View> {
+    ) -> Option<Box<View>> {
         let json = fs::read_to_string(path_to_json).unwrap();
         let data: serde_json::Value = match serde_json::from_str(&json) {
             Ok(data) => data,
             Err(_) => return None,
         };
 
-        self.build_tree(ctx, &data)
+        let mut view = Box::new(View {
+            components: Arena::new(),
+        });
+        let result = self.build_tree_components(ctx, &data, &mut view);
+
+        match result {
+            Some(_) => Some(view),
+            _ => None,
+        }
     }
 
-    pub fn build_tree(
+    fn build_tree_components<'a, 'b>(
         &self,
         ctx: &mut frontend::PresentationContext,
         v: &serde_json::Value,
-    ) -> Option<View> {
-        let mk_init = &self.controls_types[v["type"].as_str()?];
+        view: &'b mut Box<View<'a>>,
+    ) -> Option<()> {
+        // can't type it in recursive manner
 
-        let mut children: Vec<TreeComponent> = Vec::new();
+        let mut call_stack: Vec<(
+            &serde_json::Value,
+            Option<&'a RefCell<Box<dyn AbstractTreeComponent + 'a>>>,
+        )> = Vec::new();
 
-        match v["children"].as_array() {
-            Some(json_children) => {
-                for json_child in json_children {
-                    let child_n_geometry = self.build_tree(ctx, json_child)?;
-                    children.push(child_n_geometry);
+        let mut root = None;
+        call_stack.push((v, None));
+
+        loop {
+            match call_stack.pop() {
+                Some((json, parent)) => {
+                    let factory = &self.controls_types[json["type"].as_str()?];
+                    let component = &*view.components.alloc(RefCell::new(factory.make_component(
+                        ctx,
+                        v,
+                        Vec::new(),
+                    )?));
+
+                    match parent {
+                        Some(parent) => {
+                            let r = parent.borrow_mut().add_child(component);
+                        }
+                        None => root = Some(component),
+                    }
+
+                    match json["children"].as_array() {
+                        Some(json_children) => {
+                            for json_child in json_children {
+                                call_stack.push((json_child, Some(component)))
+                            }
+                        }
+                        None => {}
+                    }
                 }
-            }
-            None => {}
-        }
-
-        match mk_init(ctx, &v["data"], children.len()) {
-            Some(wrapped_draw) => Some(
-                TreeComponent {
-                    children: children,
-                    draw: wrapped_draw,
-                    name: match v["name"].as_str() {
-                        Some(s) => Some(s.to_string()),
-                        None => None,
-                    },
+                None => {
+                    break;
                 }
-            ),
-            None => None,
-        }
+            };
+        };
+
+        Some(())
     }
 
     pub fn new() -> Manager {

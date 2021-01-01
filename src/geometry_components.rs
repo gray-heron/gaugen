@@ -603,7 +603,7 @@ impl Component<GridData, GridInternalData> for Grid {
                             internal_data.rows_sizes[y] * childzone.aspect() / result.aspect();
                         new_columns_sizes[x] += internal_data.columns_sizes[x];
                     } else {
-                        // we are wasting vertical space
+                        // we are wasting hotizontal space
                         new_columns_sizes[x] +=
                             internal_data.columns_sizes[x] * result.aspect() / childzone.aspect();
                         new_rows_sizes[y] += internal_data.rows_sizes[y];

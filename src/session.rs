@@ -41,7 +41,7 @@ pub enum __TargetScreen<'a> {
 
 impl SessionBuilder {
     pub fn new() -> SessionBuilder {
-        SessionBuilder {
+        SessionBuilder{
             manager: Manager::new(),
         }
     }
@@ -191,7 +191,7 @@ impl Session<'_> {
         true
     }
 
-    pub fn new_view(&self, path_to_json: &str) -> Option<View> {
+    pub fn new_view(&self, path_to_json: &str) -> Option<Box<View>> {
         let mut ret = None; //fixme
 
         let (width, height) = self.default_screen.gl_window.get_inner_size().unwrap();
