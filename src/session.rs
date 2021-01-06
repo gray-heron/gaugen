@@ -153,7 +153,7 @@ impl Session<'_> {
 
         let (width, height, dpi) = (width as f32, height as f32, screen.gl_window.hidpi_factor());
 
-        let __font = self.font; //so no "self" is not used in closure
+        let __font = self.font; //so no "self" is not used in the closure
         let __time = &self.start_time;
         let layers = RefCell::new(Vec::new());
 
@@ -165,7 +165,7 @@ impl Session<'_> {
 
             let mut ctx = frontend::PresentationContext {
                 frame: frame,
-                time: 0.0, //get_elapsed_time(__time),
+                time: 0.0,//get_elapsed_time(__time),
                 resources: res,
                 shell_stack: vec!{DrawZone::new_empty()}
             };
@@ -173,7 +173,9 @@ impl Session<'_> {
             let zone =
                 DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height));
 
-            view.draw(&mut ctx, zone, hooks, &layers);
+            view.with_mut(|fields| {
+                fields.root.unwrap().borrow_mut().draw(&mut ctx, zone, hooks, &layers);
+            });
 
             let mut layers = layers.into_inner();
             
@@ -191,7 +193,7 @@ impl Session<'_> {
         true
     }
 
-    pub fn new_view(&self, path_to_json: &str) -> Option<Box<View>> {
+    pub fn new_view(&self, path_to_json: &str) -> Option<View> {
         let mut ret = None; //fixme
 
         let (width, height) = self.default_screen.gl_window.get_inner_size().unwrap();

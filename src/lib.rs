@@ -4,16 +4,18 @@ pub mod geometry_components;
 mod helpers;
 pub mod session;
 
+use bumpalo::Bump;
 use nalgebra::Vector2;
 use nanovg::{Color, DrawZone, StrokeOptions};
+use ouroboros::self_referencing;
 use serde;
 use serde_json;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::fs;
 use std::rc;
-use typed_arena::Arena;
 
 pub struct ControlGeometry {
     pub aspect: Option<f32>,
@@ -46,20 +48,13 @@ where
 }
 
 pub type Hooks = HashMap<String, serde_json::Map<String, serde_json::Value>>;
+type WrappedComponent<'a> = RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>;
 
-pub struct View<'a> {
-    components: Arena<RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>>,
-}
-
-impl<'a> View<'a> {
-    pub fn draw(
-        &mut self,
-        ctx: &mut frontend::PresentationContext,
-        zone: DrawZone,
-        hooks: &Hooks,
-        layers: &RefCell<Vec<DrawZone>>,
-    ) {
-    }
+#[self_referencing]
+pub struct View {
+    components: Box<Bump>,
+    #[borrows(components)]
+    root: Option<&'this WrappedComponent<'this>>,
 }
 
 trait AbstractTreeComponent<'a> {
@@ -190,12 +185,19 @@ where
         json: &serde_json::Value,
         children: Vec<&'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>>,
     ) -> Option<Box<dyn AbstractTreeComponent<'a> + 'a>> {
+        let name = match json["name"].as_str() {
+            Some(s) => {
+                Some(s.to_string())
+            },
+            None => None,
+        };
+        
         let public_data = match TPublicData::deserialize(json) {
             Ok(data) => data,
-            Err(_) => {
+            Err(err) => {
                 let default_data = self.component_type.as_ref().get_default_data()?;
                 match json.as_object() {
-                    Some(hooks) => Manager::join_hooks(&default_data, hooks),
+                    Some(partial) => Manager::join_hooks(&default_data, partial),
                     None => default_data,
                 }
             }
@@ -205,11 +207,6 @@ where
             .component_type
             .as_ref()
             .init_instance(ctx, &public_data);
-
-        let name = match json["name"].as_str() {
-            Some(s) => Some(s.to_string()),
-            None => None,
-        };
 
         Some(Box::new(ComponentInstance {
             public_data: public_data,
@@ -261,77 +258,72 @@ impl Manager {
             .insert(component.as_ref().get_name(), component_factory);
     }
 
-    pub fn make_screen<'a>(
+    pub fn make_screen(
         &self,
         ctx: &mut frontend::PresentationContext,
         path_to_json: &str,
-    ) -> Option<Box<View>> {
+    ) -> Option<View> {
         let json = fs::read_to_string(path_to_json).unwrap();
         let data: serde_json::Value = match serde_json::from_str(&json) {
             Ok(data) => data,
             Err(_) => return None,
         };
 
-        let mut view = Box::new(View {
-            components: Arena::new(),
-        });
-        let result = self.build_tree_components(ctx, &data, &mut view);
+        let mut ok = false;
 
-        match result {
-            Some(_) => Some(view),
-            _ => None,
-        }
-    }
+        let view = ViewBuilder {
+            components: Box::new(Bump::new()),
+            root_builder: |arena| {
+                let mut call_stack: VecDeque<(
+                    &serde_json::Value,
+                    Option<& RefCell<Box<dyn AbstractTreeComponent<'_>>>>,
+                )> = VecDeque::new();
 
-    fn build_tree_components<'a, 'b>(
-        &self,
-        ctx: &mut frontend::PresentationContext,
-        v: &serde_json::Value,
-        view: &'b mut Box<View<'a>>,
-    ) -> Option<()> {
-        // can't type it in recursive manner
+                call_stack.push_back((&data, None));
+                let mut root = None;
 
-        let mut call_stack: Vec<(
-            &serde_json::Value,
-            Option<&'a RefCell<Box<dyn AbstractTreeComponent + 'a>>>,
-        )> = Vec::new();
+                loop {
+                    match call_stack.pop_front() {
+                        Some((json, parent)) => {
+                            let factory = &self.controls_types[json["type"].as_str()?];
+                            let component = &*arena.alloc(RefCell::new(factory.make_component(
+                                ctx,
+                                &json["data"],
+                                Vec::new(),
+                            )?));
 
-        let mut root = None;
-        call_stack.push((v, None));
+                            match parent {
+                                Some(parent) => {
+                                    parent.borrow_mut().add_child(component);
+                                }
+                                None => root = Some(component),
+                            }
 
-        loop {
-            match call_stack.pop() {
-                Some((json, parent)) => {
-                    let factory = &self.controls_types[json["type"].as_str()?];
-                    let component = &*view.components.alloc(RefCell::new(factory.make_component(
-                        ctx,
-                        v,
-                        Vec::new(),
-                    )?));
-
-                    match parent {
-                        Some(parent) => {
-                            let r = parent.borrow_mut().add_child(component);
-                        }
-                        None => root = Some(component),
-                    }
-
-                    match json["children"].as_array() {
-                        Some(json_children) => {
-                            for json_child in json_children {
-                                call_stack.push((json_child, Some(component)))
+                            match json["children"].as_array() {
+                                Some(json_children) => {
+                                    for json_child in json_children {
+                                        call_stack.push_back((json_child, Some(component)))
+                                    }
+                                }
+                                None => {}
                             }
                         }
-                        None => {}
-                    }
+                        None => {
+                            break;
+                        }
+                    };
                 }
-                None => {
-                    break;
-                }
-            };
-        };
 
-        Some(())
+                ok = true;
+                root
+            },
+        }.build();
+
+        if ok {
+            Some(view)
+        } else {
+            None
+        }
     }
 
     pub fn new() -> Manager {
