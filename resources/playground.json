@@ -25,10 +25,7 @@
                     "type": "GroupingBox",
                     "data": {
                         "spacing": 0.95,
-                        "title": "",
-                        "title_size": {
-                            "Absolute": 0.0
-                        }
+                        "title": ""
                     },
                     "children": [
                         {
@@ -156,10 +153,7 @@
                     "type": "GroupingBox",
                     "data": {
                         "spacing": 0.95,
-                        "title": "SYSTEMS",
-                        "title_size": {
-                            "Absolute": 35.0
-                        }
+                        "title": "SYSTEMS"
                     },
                     "children": [
                         {
@@ -244,10 +238,7 @@
                     "type": "GroupingBox",
                     "data": {
                         "spacing": 0.95,
-                        "title": "ENGINES",
-                        "title_size": {
-                            "Absolute": 35.0
-                        }
+                        "title": "ENGINES"
                     },
                     "children": [
                         {

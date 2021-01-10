@@ -5,13 +5,11 @@ mod helpers;
 pub mod session;
 
 use bumpalo::Bump;
-use nalgebra::Vector2;
-use nanovg::{Color, DrawZone, StrokeOptions};
+use nanovg::DrawZone;
 use ouroboros::self_referencing;
 use serde;
 use serde_json;
-use std::cell::Cell;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fs;
@@ -20,6 +18,10 @@ use std::rc;
 pub struct ControlGeometry {
     pub aspect: Option<f32>,
     pub size_preference: f32,
+}
+
+pub enum Event {
+    MouseClick(f32, f32),
 }
 
 type DrawChild<'a> = Box<dyn FnMut(&mut frontend::PresentationContext, DrawZone) -> DrawZone + 'a>;
@@ -45,28 +47,35 @@ where
         internal_data: &mut TComponentInternalInstanceData,
         public_data: &TComponentPublicInstanceData,
     );
+
+    fn handle_event(
+        &self,
+        _drawn_location: &DrawZone,
+        _event: &Event,
+        _internal_data: &mut TComponentInternalInstanceData,
+        _public_data: &mut TComponentPublicInstanceData,
+    ) {
+    }
 }
 
 pub type Hooks = HashMap<String, serde_json::Map<String, serde_json::Value>>;
-type WrappedComponent<'a> = RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>;
+
+pub struct Layer<'a> {
+    components: Vec<&'a dyn AbstractWrappedComponent<'a>>,
+}
 
 #[self_referencing]
 pub struct View {
     components: Box<Bump>,
     #[borrows(components)]
-    root: Option<&'this WrappedComponent<'this>>,
+    layers: Vec<Layer<'this>>,
 }
 
 trait AbstractTreeComponent<'a> {
-    fn draw(
-        &mut self,
-        ctx: &mut frontend::PresentationContext,
-        zone: DrawZone,
-        hooks: &Hooks,
-        layers: &RefCell<Vec<DrawZone>>,
-    );
-
-    fn add_child(&mut self, child: &'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>);
+    fn draw(&mut self, ctx: &mut frontend::PresentationContext, zone: DrawZone, hooks: &Hooks);
+    fn add_child(&mut self, child: &'a dyn AbstractWrappedComponent<'a>);
+    fn get_drawn_location(&self) -> &DrawZone;
+    fn handle_event(&mut self, drawn_location: &DrawZone, event: &Event);
 }
 
 pub struct Manager {
@@ -80,9 +89,10 @@ where
 {
     pub public_data: TPublicData,
     pub internal_data: TInternalData,
-    pub children: Vec<&'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>>,
-    pub component_type: std::rc::Rc<Box<dyn Component<TPublicData, TInternalData>>>,
+    pub children: Vec<&'a dyn AbstractWrappedComponent<'a>>,
+    pub component_type: std::rc::Rc<Box<dyn Component<TPublicData, TInternalData>>>, //fixme
     pub name: Option<String>,
+    pub drawn_location: DrawZone,
 }
 
 fn shell_merge_bottom(stack: &mut Vec<DrawZone>, zone: &DrawZone) -> DrawZone {
@@ -96,13 +106,7 @@ where
     TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
     TInternalData: 'static,
 {
-    fn draw(
-        &mut self,
-        ctx: &mut frontend::PresentationContext,
-        zone: DrawZone,
-        hooks: &Hooks,
-        layers: &RefCell<Vec<DrawZone>>,
-    ) {
+    fn draw(&mut self, ctx: &mut frontend::PresentationContext, zone: DrawZone, hooks: &Hooks) {
         let mut draws: Vec<
             Box<dyn FnMut(&mut frontend::PresentationContext, DrawZone) -> DrawZone>,
         > = Vec::new();
@@ -114,32 +118,21 @@ where
                     shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
                     ctx.shell_stack.push(DrawZone::new_empty());
 
-                    child.draw(ctx, z, hooks, layers);
+                    child.draw(ctx, z, hooks);
 
                     let drawn =
                         shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
+
                     ctx.shell_stack.pop();
                     ctx.shell_stack
                         .last_mut()
                         .unwrap()
                         .convex_with_a_zone(&drawn);
-
-                    layers.borrow_mut().push(drawn);
                     drawn
                 },
             );
             draws.push(b);
         }
-
-        let no_hooks = serde_json::Map::new();
-
-        let my_hooks = match &self.name {
-            Some(name) => match hooks.get(name) {
-                Some(hooks) => hooks,
-                None => &no_hooks,
-            },
-            None => &no_hooks,
-        };
 
         self.component_type.as_ref().draw(
             ctx,
@@ -148,11 +141,53 @@ where
             &mut self.internal_data,
             &self.public_data,
         );
-        shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
+
+        self.drawn_location = shell_merge_bottom(&mut ctx.shell_stack, &ctx.frame.shell_replace());
     }
 
-    fn add_child(&mut self, child: &'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>) {
+    fn add_child(&mut self, child: &'a dyn AbstractWrappedComponent<'a>) {
         self.children.push(child);
+    }
+
+    fn get_drawn_location(&self) -> &DrawZone {
+        &self.drawn_location
+    }
+
+    fn handle_event(&mut self, drawn_location: &DrawZone, event: &Event) {
+        self.component_type.handle_event(
+            drawn_location,
+            event,
+            &mut self.internal_data,
+            &mut self.public_data,
+        );
+    }
+}
+
+trait AbstractWrappedComponent<'a> {
+    fn borrow(&self) -> Ref<dyn AbstractTreeComponent<'a>>;
+    fn borrow_mut(&self) -> RefMut<dyn AbstractTreeComponent<'a>>;
+}
+
+struct WrappedComponent<'a, TPublicData, TInternalData>
+where
+    TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
+    TInternalData: 'static,
+{
+    storage: RefCell<ComponentInstance<'a, TPublicData, TInternalData>>,
+}
+
+impl<'a, TPublicData, TInternalData> AbstractWrappedComponent<'a>
+    for WrappedComponent<'a, TPublicData, TInternalData>
+where
+    TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
+    TInternalData: 'static,
+{
+    fn borrow(&self) -> Ref<dyn AbstractTreeComponent<'a>> {
+        self.storage.borrow()
+    }
+
+    fn borrow_mut(&self) -> RefMut<dyn AbstractTreeComponent<'a>> {
+        self.storage.borrow_mut()
     }
 }
 
@@ -161,8 +196,9 @@ trait AbstractComponentFactory {
         &self,
         ctx: &mut frontend::PresentationContext,
         json: &serde_json::Value,
-        children: Vec<&'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>>,
-    ) -> Option<Box<dyn AbstractTreeComponent<'a> + 'a>>;
+        bump: &'a Bump,
+        children: Vec<&'a dyn AbstractWrappedComponent<'a>>,
+    ) -> Option<&'a dyn AbstractWrappedComponent<'a>>;
 }
 
 struct ConcreteComponentFactory<TPublicData, TInternalData>
@@ -183,18 +219,16 @@ where
         &self,
         ctx: &mut frontend::PresentationContext,
         json: &serde_json::Value,
-        children: Vec<&'a RefCell<Box<dyn AbstractTreeComponent<'a> + 'a>>>,
-    ) -> Option<Box<dyn AbstractTreeComponent<'a> + 'a>> {
+        bump: &'a Bump,
+        children: Vec<&'a dyn AbstractWrappedComponent<'a>>,
+    ) -> Option<&'a dyn AbstractWrappedComponent<'a>> {
         let name = match json["name"].as_str() {
-            Some(s) => {
-                Some(s.to_string())
-            },
+            Some(s) => Some(s.to_string()),
             None => None,
         };
-        
         let public_data = match TPublicData::deserialize(json) {
             Ok(data) => data,
-            Err(err) => {
+            Err(_err) => {
                 let default_data = self.component_type.as_ref().get_default_data()?;
                 match json.as_object() {
                     Some(partial) => Manager::join_hooks(&default_data, partial),
@@ -208,13 +242,16 @@ where
             .as_ref()
             .init_instance(ctx, &public_data);
 
-        Some(Box::new(ComponentInstance {
-            public_data: public_data,
-            internal_data: private_data,
-            children: children,
-            component_type: self.component_type.clone(),
-            name: name,
-        }))
+            let instance = WrappedComponent{storage: RefCell::new(ComponentInstance {
+                public_data: public_data,
+                internal_data: private_data,
+                children: children,
+                component_type: self.component_type.clone(),
+                name: name,
+                drawn_location: DrawZone::new_empty(),
+            })};
+
+        Some(bump.alloc(instance))
     }
 }
 
@@ -269,34 +306,43 @@ impl Manager {
             Err(_) => return None,
         };
 
-        let mut ok = false;
-
         let view = ViewBuilder {
             components: Box::new(Bump::new()),
-            root_builder: |arena| {
+            layers_builder: |arena| {
                 let mut call_stack: VecDeque<(
                     &serde_json::Value,
-                    Option<& RefCell<Box<dyn AbstractTreeComponent<'_>>>>,
+                    Option<&'_ dyn AbstractWrappedComponent<'_>>,
                 )> = VecDeque::new();
 
+                let mut ret = vec![Layer {
+                    components: Vec::new(),
+                }];
+                let first_layer = &mut ret[0];
+
                 call_stack.push_back((&data, None));
-                let mut root = None;
 
                 loop {
                     match call_stack.pop_front() {
                         Some((json, parent)) => {
-                            let factory = &self.controls_types[json["type"].as_str()?];
-                            let component = &*arena.alloc(RefCell::new(factory.make_component(
-                                ctx,
-                                &json["data"],
-                                Vec::new(),
-                            )?));
+                            let component_type = match json["type"].as_str() {
+                                Some(ct) => ct,
+                                _ => return Vec::new(),
+                            };
+
+                            let factory = &self.controls_types[component_type];
+
+                            let component =
+                                match factory.make_component(ctx, &json["data"], arena, Vec::new())
+                                {
+                                    Some(c) => c,
+                                    _ => return Vec::new(),
+                                };
 
                             match parent {
                                 Some(parent) => {
                                     parent.borrow_mut().add_child(component);
                                 }
-                                None => root = Some(component),
+                                None => {}
                             }
 
                             match json["children"].as_array() {
@@ -307,6 +353,8 @@ impl Manager {
                                 }
                                 None => {}
                             }
+
+                            first_layer.components.push(component);
                         }
                         None => {
                             break;
@@ -314,12 +362,12 @@ impl Manager {
                     };
                 }
 
-                ok = true;
-                root
+                ret
             },
-        }.build();
+        }
+        .build();
 
-        if ok {
+        if view.with(|fields| fields.layers[0].components.len() > 0) {
             Some(view)
         } else {
             None

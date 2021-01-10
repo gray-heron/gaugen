@@ -3,12 +3,11 @@ use crate::*;
 
 use glutin::GlContext;
 use nalgebra::Vector2;
-use std::time::Instant;
-use nanovg::{*};
+use nanovg::*;
 use std::cell::RefCell;
+use std::time::Instant;
 
 const INIT_WINDOW_SIZE: (u32, u32) = (800, 800);
-
 
 fn get_elapsed_time(instant: &Instant) -> f32 {
     let elapsed = instant.elapsed();
@@ -25,12 +24,12 @@ pub struct Session<'a> {
     font: nanovg::Font<'a>,
     manager: Manager,
     default_screen: Screen,
-    start_time: Instant
+    start_time: Instant,
 }
 
 pub struct Screen {
     gl_window: glutin::GlWindow,
-    events_loop: glutin::EventsLoop
+    events_loop: glutin::EventsLoop,
 }
 
 // multi-screen capability waits for glutin support for multi-window with one context
@@ -41,7 +40,7 @@ pub enum __TargetScreen<'a> {
 
 impl SessionBuilder {
     pub fn new() -> SessionBuilder {
-        SessionBuilder{
+        SessionBuilder {
             manager: Manager::new(),
         }
     }
@@ -90,7 +89,7 @@ impl SessionBuilder {
             font: font,
             manager: self.manager,
             default_screen: default_screen,
-            start_time: Instant::now()
+            start_time: Instant::now(),
         };
 
         handler(&mut session);
@@ -119,8 +118,9 @@ impl Session<'_> {
             gl::load_with(|symbol| screen.gl_window.get_proc_address(symbol) as *const _);
         }
 
-        let mut mx = 0.0f32;
-        let mut my = 0.0f32;
+        let mut m_x = 0.0f32;
+        let mut m_y = 0.0f32;
+        let mut m_pressed = false;
         let mut quit = false;
 
         let __window = &mut screen.gl_window;
@@ -130,9 +130,13 @@ impl Session<'_> {
                 glutin::WindowEvent::Closed => quit = true,
                 glutin::WindowEvent::Resized(w, h) => __window.resize(w, h),
                 glutin::WindowEvent::CursorMoved { position, .. } => {
-                    mx = position.0 as f32;
-                    my = position.1 as f32;
+                    m_x = position.0 as f32;
+                    m_y = position.1 as f32;
                 }
+                glutin::WindowEvent::MouseInput { button, .. } => match button {
+                    glutin::MouseButton::Left => m_pressed = true,
+                    _ => {}
+                },
                 _ => {}
             },
             _ => {}
@@ -155,7 +159,6 @@ impl Session<'_> {
 
         let __font = self.font; //so no "self" is not used in the closure
         let __time = &self.start_time;
-        let layers = RefCell::new(Vec::new());
 
         self.context.frame((width, height), dpi, |frame| {
             let res = frontend::Resources {
@@ -165,30 +168,39 @@ impl Session<'_> {
 
             let mut ctx = frontend::PresentationContext {
                 frame: frame,
-                time: 0.0,//get_elapsed_time(__time),
+                time: 0.0, //get_elapsed_time(__time),
                 resources: res,
-                shell_stack: vec!{DrawZone::new_empty()}
+                shell_stack: vec![DrawZone::new_empty()],
             };
 
-            let zone =
-                DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height));
+            let zone = DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height));
 
             view.with_mut(|fields| {
-                fields.root.unwrap().borrow_mut().draw(&mut ctx, zone, hooks, &layers);
+                for layer in fields.layers {
+                    layer.components[0].borrow_mut().draw(&mut ctx, zone, hooks);
+                }
             });
-
-            let mut layers = layers.into_inner();
-            
-            layers.push(ctx.shell_stack.pop().unwrap());
-
-            for layer in layers {
-                let drawn = layer;
-                
-                helpers::dotted_zone(&mut ctx, &layer);
-            }
         });
 
         screen.gl_window.swap_buffers().unwrap();
+
+        if m_pressed {
+            view.with_mut(|fields| {
+                for layer in fields.layers {
+                    //fixme: don't traverse all the components, somehow register which components listen to what
+                    for component in &layer.components {
+                        let mut component = component.borrow_mut();
+                        let drawn_location = component.get_drawn_location().clone();
+
+                        if (drawn_location.m.x - m_x).abs() <= drawn_location.size.x / 2.0
+                            && (drawn_location.m.y - m_y).abs() <= drawn_location.size.y / 2.0
+                        {
+                            component.handle_event(&drawn_location, &Event::MouseClick(m_x, m_y));
+                        }
+                    }
+                }
+            });
+        }
 
         true
     }
@@ -211,13 +223,38 @@ impl Session<'_> {
                     frame: frame,
                     time: 0.0,
                     resources: res,
-                    shell_stack: vec!{DrawZone::new_empty()}
+                    shell_stack: vec![DrawZone::new_empty()],
                 };
 
-                ret = Some(self.manager.make_screen(
-                    &mut ctx,
-                    path_to_json,
-                ))
+                ret = Some(self.manager.make_screen(&mut ctx, path_to_json))
+            },
+        );
+
+        ret.unwrap()
+    }
+
+    pub fn instantiate_component(&self, path_to_json: &str) -> Option<View> {
+        let mut ret = None; //fixme
+
+        let (width, height) = self.default_screen.gl_window.get_inner_size().unwrap();
+
+        self.context.frame(
+            (width as f32, height as f32),
+            self.default_screen.gl_window.hidpi_factor(),
+            |frame| {
+                let res = frontend::Resources {
+                    palette: &frontend::DarkPalette {},
+                    font: self.font,
+                };
+
+                let mut ctx = frontend::PresentationContext {
+                    frame: frame,
+                    time: 0.0,
+                    resources: res,
+                    shell_stack: vec![DrawZone::new_empty()],
+                };
+
+                ret = Some(self.manager.make_screen(&mut ctx, path_to_json))
             },
         );
 

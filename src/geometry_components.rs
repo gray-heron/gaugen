@@ -5,6 +5,21 @@ use math::round;
 use nalgebra::Vector2;
 use std::f32;
 
+// =========================== HELPERS ===========================
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+pub enum CoordinateUnit {
+    Pixels,
+    Points,
+    Relative,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+pub enum CoordinateOrigin {
+    FromCorner,
+    FromMiddle,
+}
+
 // =========================== SPACER ===========================
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -46,6 +61,60 @@ impl Component<SpacerInstance, ()> for Spacer {
         };
 
         children[0].as_mut()(ctx, childzone);
+    }
+}
+
+// =========================== FloatingArea ===========================
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct FloatingAreaInstance {
+    positions: Vec<(CoordinateUnit, CoordinateOrigin, f32, f32, f32, f32)>,
+}
+
+pub struct FloatingArea;
+
+impl Component<FloatingAreaInstance, ()> for FloatingArea {
+    fn get_default_data(&self) -> Option<FloatingAreaInstance> {
+        None
+    }
+
+    fn max_children(&self) -> Option<u32> {
+        Some(1)
+    }
+
+    fn get_name(&self) -> &'static str {
+        "Spacer"
+    }
+
+    fn init_instance(
+        &self,
+        __ctx: &mut frontend::PresentationContext,
+        __data: &FloatingAreaInstance,
+    ) {
+    }
+
+    fn draw(
+        &self,
+        ctx: &mut frontend::PresentationContext,
+        __zone: DrawZone, //fixme
+        children: &mut [DrawChild],
+        __internal_data: &mut (),
+        data: &FloatingAreaInstance,
+    ) {
+        assert!(children.len() == data.positions.len());
+
+        for i in 0..children.len() {
+            assert!(data.positions[i].0 == CoordinateUnit::Pixels); //fixme
+            assert!(data.positions[i].1 == CoordinateOrigin::FromMiddle);
+            children[i](
+                ctx,
+                DrawZone {
+                    m: Vector2::new(data.positions[i].2, data.positions[i].3),
+                    size: Vector2::new(data.positions[i].4, data.positions[i].5),
+                    empty: false
+                },
+            );
+        }
     }
 }
 
@@ -98,7 +167,7 @@ pub struct Split;
 struct SplitInternalData {
     aspects: Vec<f32>,
     primary_width: f32,
-    primary_aspect: f32
+    primary_aspect: f32,
 }
 
 impl SplitInstance {
@@ -162,7 +231,7 @@ impl Component<SplitInstance, SplitInternalData> for Split {
         SplitInternalData {
             aspects: Vec::new(),
             primary_width: 0.0,
-            primary_aspect: 1.0
+            primary_aspect: 1.0,
         }
     }
 
@@ -182,7 +251,7 @@ impl Component<SplitInstance, SplitInternalData> for Split {
         internal_data: &mut SplitInternalData,
         data: &SplitInstance,
     ) {
-        let zone = zone.constraint_to_aspect((zone.aspect() *internal_data.primary_aspect).sqrt());
+        let zone = zone.constraint_to_aspect((zone.aspect() * internal_data.primary_aspect).sqrt());
         let mut new_aspects = Vec::new();
         let mut new_primary_width = 0.0;
         let mut new_total_aspect = 0.0;
@@ -221,7 +290,6 @@ impl Component<SplitInstance, SplitInternalData> for Split {
                 new_aspects.push(new_aspect);
                 new_primary_width += new_aspect;
                 primary_cursor += internal_data.aspects[i] * space_per_unit;
-
             }
         } else {
             panic!();
@@ -249,15 +317,9 @@ impl Component<SplitInstance, SplitInternalData> for Split {
 // ===========================
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub enum GroupingBoxTitleSize {
-    RelativeToHeight(f32),
-    Absolute(f32),
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct GroupingBoxData {
     pub spacing: f32,
-    pub title_size: GroupingBoxTitleSize,
+    pub title_size: (CoordinateUnit, f32),
     pub title: String,
 }
 
@@ -276,7 +338,7 @@ impl Component<GroupingBoxData, Option<f32>> for GroupingBox {
     fn get_default_data(&self) -> Option<GroupingBoxData> {
         Some(GroupingBoxData {
             spacing: 0.9,
-            title_size: GroupingBoxTitleSize::RelativeToHeight(0.2),
+            title_size: (CoordinateUnit::Relative, 0.2),
             title: "GroupingBox".to_string(),
         })
     }
@@ -304,9 +366,10 @@ impl Component<GroupingBoxData, Option<f32>> for GroupingBox {
             Some(aspect) => zone.constraint_to_aspect((*aspect * zone.aspect()).sqrt()),
         };
 
-        let title_height = match public_data.title_size {
-            GroupingBoxTitleSize::RelativeToHeight(height) => zone.size.y * height,
-            GroupingBoxTitleSize::Absolute(height) => height,
+        let title_height = match public_data.title_size.0 {
+            CoordinateUnit::Relative => zone.size.y * public_data.title_size.1,
+            CoordinateUnit::Pixels => public_data.title_size.1,
+            CoordinateUnit::Points => panic!(),
         };
 
         let child_height = zone.size.y - title_height;
