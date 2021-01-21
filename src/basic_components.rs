@@ -180,7 +180,10 @@ impl Component<RotationalIndicatorData, ()> for RotationalIndicator {
             ..Default::default()
         };
 
-        if value_status != Status::Error || ctx.time * 2.0 - ((ctx.time * 2.0) as i32 as f32) < 0.66
+        let time = ctx.time;
+        let time = 0.0; //fixme
+
+        if value_status != Status::Error || time * 2.0 - ((time * 2.0) as i32 as f32) < 0.66
         {
             ctx.frame.text_box(
                 ctx.resources.font,

@@ -7,14 +7,14 @@ use std::f32;
 
 // =========================== HELPERS ===========================
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq)]
 pub enum CoordinateUnit {
     Pixels,
     Points,
     Relative,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq)]
 pub enum CoordinateOrigin {
     FromCorner,
     FromMiddle,
@@ -68,14 +68,16 @@ impl Component<SpacerInstance, ()> for Spacer {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct FloatingAreaInstance {
-    positions: Vec<(CoordinateUnit, CoordinateOrigin, f32, f32, f32, f32)>,
+    pub positions: Vec<(CoordinateUnit, CoordinateOrigin, f32, f32, f32, f32)>,
 }
 
 pub struct FloatingArea;
 
 impl Component<FloatingAreaInstance, ()> for FloatingArea {
     fn get_default_data(&self) -> Option<FloatingAreaInstance> {
-        None
+        Some(FloatingAreaInstance {
+            positions: Vec::new(),
+        })
     }
 
     fn max_children(&self) -> Option<u32> {
@@ -111,7 +113,7 @@ impl Component<FloatingAreaInstance, ()> for FloatingArea {
                 DrawZone {
                     m: Vector2::new(data.positions[i].2, data.positions[i].3),
                     size: Vector2::new(data.positions[i].4, data.positions[i].5),
-                    empty: false
+                    empty: false,
                 },
             );
         }
@@ -713,10 +715,12 @@ pub fn components() -> impl Fn(&mut Manager) {
         let spacer = Box::new(Spacer {});
         let grouping_box = Box::new(GroupingBox {});
         let grid = Box::new(Grid {});
+        let floating_area = Box::new(FloatingArea {});
 
         manager.register_component_type(split);
         manager.register_component_type(spacer);
         manager.register_component_type(grouping_box);
         manager.register_component_type(grid);
+        manager.register_component_type(floating_area);
     }
 }

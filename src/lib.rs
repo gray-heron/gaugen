@@ -21,10 +21,10 @@ pub struct ControlGeometry {
 }
 
 pub enum Event {
-    MouseClick(f32, f32),
+    MouseClick(f32, f32, glutin::MouseButton),
 }
 
-type DrawChild<'a> = Box<dyn FnMut(&mut frontend::PresentationContext, DrawZone) -> DrawZone + 'a>;
+pub type DrawChild<'a> = Box<dyn FnMut(&mut frontend::PresentationContext, DrawZone) -> DrawZone + 'a>;
 
 pub trait Component<TComponentPublicInstanceData, TComponentInternalInstanceData>
 where
@@ -61,17 +61,39 @@ where
 pub type Hooks = HashMap<String, serde_json::Map<String, serde_json::Value>>;
 
 pub struct Layer<'a> {
-    components: Vec<&'a dyn AbstractWrappedComponent<'a>>,
+    pub components: Vec<&'a dyn AbstractWrappedComponent<'a>>,
 }
 
 #[self_referencing]
 pub struct View {
     components: Box<Bump>,
     #[borrows(components)]
+    #[not_covariant]
     layers: Vec<Layer<'this>>,
 }
 
-trait AbstractTreeComponent<'a> {
+impl View{
+    pub fn into_inner<F>(&mut self, f: F)
+    where F: FnOnce(InnerView) {
+        self.with_mut(|fields| {
+            f(InnerView{
+                fields: fields
+            });
+        });
+    }
+}
+
+pub struct InnerView<'a, 'b> {
+    fields: ouroboros_impl_view::BorrowedMutFields<'a, 'b>
+}
+
+impl<'a, 'b> InnerView<'a, 'b> {
+    pub fn get_layer(& self, layer: usize) -> &Layer<'b> {
+        &self.fields.layers[layer]
+    }
+}
+
+pub trait AbstractTreeComponent<'a> {
     fn draw(&mut self, ctx: &mut frontend::PresentationContext, zone: DrawZone, hooks: &Hooks);
     fn add_child(&mut self, child: &'a dyn AbstractWrappedComponent<'a>);
     fn get_drawn_location(&self) -> &DrawZone;
@@ -82,7 +104,7 @@ pub struct Manager {
     controls_types: HashMap<&'static str, Box<dyn AbstractComponentFactory>>,
 }
 
-struct ComponentInstance<'a, TPublicData, TInternalData>
+pub struct ComponentInstance<'a, 'b, TPublicData, TInternalData>
 where
     TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
     TInternalData: 'static,
@@ -90,7 +112,7 @@ where
     pub public_data: TPublicData,
     pub internal_data: TInternalData,
     pub children: Vec<&'a dyn AbstractWrappedComponent<'a>>,
-    pub component_type: std::rc::Rc<Box<dyn Component<TPublicData, TInternalData>>>, //fixme
+    pub component_type: std::rc::Rc<Box<dyn Component<TPublicData, TInternalData> + 'b>>, //fixme
     pub name: Option<String>,
     pub drawn_location: DrawZone,
 }
@@ -100,8 +122,8 @@ fn shell_merge_bottom(stack: &mut Vec<DrawZone>, zone: &DrawZone) -> DrawZone {
     *stack.last().unwrap()
 }
 
-impl<'a, TPublicData, TInternalData> AbstractTreeComponent<'a>
-    for ComponentInstance<'a, TPublicData, TInternalData>
+impl<'a, 'b, TPublicData, TInternalData> AbstractTreeComponent<'a>
+    for ComponentInstance<'a, 'b, TPublicData, TInternalData>
 where
     TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
     TInternalData: 'static,
@@ -163,21 +185,21 @@ where
     }
 }
 
-trait AbstractWrappedComponent<'a> {
+pub trait AbstractWrappedComponent<'a> {
     fn borrow(&self) -> Ref<dyn AbstractTreeComponent<'a>>;
     fn borrow_mut(&self) -> RefMut<dyn AbstractTreeComponent<'a>>;
 }
 
-struct WrappedComponent<'a, TPublicData, TInternalData>
+pub struct WrappedComponent<'a, 'b, TPublicData, TInternalData>
 where
     TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
     TInternalData: 'static,
 {
-    storage: RefCell<ComponentInstance<'a, TPublicData, TInternalData>>,
+    pub storage: RefCell<ComponentInstance<'a, 'b, TPublicData, TInternalData>>,
 }
 
-impl<'a, TPublicData, TInternalData> AbstractWrappedComponent<'a>
-    for WrappedComponent<'a, TPublicData, TInternalData>
+impl<'a, 'b, TPublicData, TInternalData> AbstractWrappedComponent<'a>
+    for WrappedComponent<'a, 'b, TPublicData, TInternalData>
 where
     TPublicData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
     TInternalData: 'static,
@@ -242,14 +264,16 @@ where
             .as_ref()
             .init_instance(ctx, &public_data);
 
-            let instance = WrappedComponent{storage: RefCell::new(ComponentInstance {
+        let instance = WrappedComponent {
+            storage: RefCell::new(ComponentInstance {
                 public_data: public_data,
                 internal_data: private_data,
                 children: children,
                 component_type: self.component_type.clone(),
                 name: name,
                 drawn_location: DrawZone::new_empty(),
-            })};
+            }),
+        };
 
         Some(bump.alloc(instance))
     }

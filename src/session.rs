@@ -25,6 +25,8 @@ pub struct Session<'a> {
     manager: Manager,
     default_screen: Screen,
     start_time: Instant,
+    m_x: f32,
+    m_y: f32,
 }
 
 pub struct Screen {
@@ -90,6 +92,8 @@ impl SessionBuilder {
             manager: self.manager,
             default_screen: default_screen,
             start_time: Instant::now(),
+            m_x: 0.0,
+            m_y: 0.0,
         };
 
         handler(&mut session);
@@ -101,6 +105,16 @@ impl Session<'_> {
         &mut self,
         //screen: TargetScreen,
         view: &mut View,
+        palette: &dyn frontend::Palette,
+        hooks: &Hooks,
+    ) -> bool {
+        view.with_mut(|fields| self.draw_inner(&mut InnerView { fields: fields }, palette, hooks))
+    }
+
+    pub fn draw_inner<'a>(
+        &mut self,
+        //screen: TargetScreen,
+        inner_view: &InnerView<'_, 'a>,
         palette: &dyn frontend::Palette,
         hooks: &Hooks,
     ) -> bool {
@@ -118,24 +132,25 @@ impl Session<'_> {
             gl::load_with(|symbol| screen.gl_window.get_proc_address(symbol) as *const _);
         }
 
-        let mut m_x = 0.0f32;
-        let mut m_y = 0.0f32;
-        let mut m_pressed = false;
+        let mut m_pressed: Option<glutin::MouseButton> = None;
         let mut quit = false;
 
         let __window = &mut screen.gl_window;
+
+        let (m_x, m_y) = (&mut self.m_x, &mut self.m_y);
 
         screen.events_loop.poll_events(|event| match event {
             glutin::Event::WindowEvent { event, .. } => match event {
                 glutin::WindowEvent::Closed => quit = true,
                 glutin::WindowEvent::Resized(w, h) => __window.resize(w, h),
-                glutin::WindowEvent::CursorMoved { position, .. } => {
-                    m_x = position.0 as f32;
-                    m_y = position.1 as f32;
-                }
-                glutin::WindowEvent::MouseInput { button, .. } => match button {
-                    glutin::MouseButton::Left => m_pressed = true,
-                    _ => {}
+                glutin::WindowEvent::CursorMoved {position, ..} => {
+                    *m_x = position.0 as f32;
+                    *m_y = position.1 as f32;
+                },
+                glutin::WindowEvent::MouseInput {button, state, ..} => {
+                    if state == glutin::ElementState::Pressed {
+                        m_pressed = Some(button);
+                    }
                 },
                 _ => {}
             },
@@ -168,38 +183,40 @@ impl Session<'_> {
 
             let mut ctx = frontend::PresentationContext {
                 frame: frame,
-                time: 0.0, //get_elapsed_time(__time),
+                time: get_elapsed_time(__time),
                 resources: res,
                 shell_stack: vec![DrawZone::new_empty()],
             };
 
             let zone = DrawZone::from_rect(Vector2::new(0.0, 0.0), Vector2::new(width, height));
 
-            view.with_mut(|fields| {
-                for layer in fields.layers {
-                    layer.components[0].borrow_mut().draw(&mut ctx, zone, hooks);
-                }
-            });
+            for layer in inner_view.fields.layers.iter() {
+                layer.components[0].borrow_mut().draw(&mut ctx, zone, hooks);
+            }
         });
 
         screen.gl_window.swap_buffers().unwrap();
 
-        if m_pressed {
-            view.with_mut(|fields| {
-                for layer in fields.layers {
+        match m_pressed {
+            Some(button) => {
+                for layer in inner_view.fields.layers.iter() {
                     //fixme: don't traverse all the components, somehow register which components listen to what
                     for component in &layer.components {
                         let mut component = component.borrow_mut();
                         let drawn_location = component.get_drawn_location().clone();
 
-                        if (drawn_location.m.x - m_x).abs() <= drawn_location.size.x / 2.0
-                            && (drawn_location.m.y - m_y).abs() <= drawn_location.size.y / 2.0
+                        if (drawn_location.m.x - self.m_x).abs() <= drawn_location.size.x / 2.0
+                            && (drawn_location.m.y - self.m_y).abs() <= drawn_location.size.y / 2.0
                         {
-                            component.handle_event(&drawn_location, &Event::MouseClick(m_x, m_y));
+                            component.handle_event(
+                                &drawn_location,
+                                &Event::MouseClick(self.m_x, self.m_y, button),
+                            );
                         }
                     }
                 }
-            });
+            }
+            _ => {}
         }
 
         true
@@ -232,11 +249,19 @@ impl Session<'_> {
 
         ret.unwrap()
     }
-
-    pub fn instantiate_component(&self, path_to_json: &str) -> Option<View> {
-        let mut ret = None; //fixme
-
+    pub fn instantiate_component<'a, 'b, TComponentData, TPrivateComponentData>(
+        &self,
+        view: &mut InnerView<'_, 'a>,
+        layer: usize,
+        supplied_public_data: Option<TComponentData>,
+        component: std::rc::Rc<Box<dyn Component<TComponentData, TPrivateComponentData> + 'b>>,
+    ) -> &'a WrappedComponent<'a, 'b, TComponentData, TPrivateComponentData>
+    where
+        TComponentData: serde::ser::Serialize + serde::de::DeserializeOwned + Clone + 'static,
+        TPrivateComponentData: 'static,
+    {
         let (width, height) = self.default_screen.gl_window.get_inner_size().unwrap();
+        let mut ret = None; //fixme
 
         self.context.frame(
             (width as f32, height as f32),
@@ -254,11 +279,39 @@ impl Session<'_> {
                     shell_stack: vec![DrawZone::new_empty()],
                 };
 
-                ret = Some(self.manager.make_screen(&mut ctx, path_to_json))
+                let default_data = component.as_ref().get_default_data();
+                let public_data = match (supplied_public_data, default_data) {
+                    (Some(supplied_public_data), _) => supplied_public_data,
+                    (None, Some(default_data)) => default_data,
+                    _ => panic!(),
+                };
+
+                let private_data = component.as_ref().init_instance(&mut ctx, &public_data);
+
+                ret = Some(WrappedComponent {
+                    storage: RefCell::new(ComponentInstance {
+                        public_data: public_data,
+                        internal_data: private_data,
+                        children: Vec::new(),
+                        component_type: component.clone(),
+                        name: None,
+                        drawn_location: DrawZone::new_empty(),
+                    }),
+                });
             },
         );
 
-        ret.unwrap()
+        let instance = view.fields.components.alloc(ret.unwrap());
+
+        while layer + 1 > view.fields.layers.len() {
+            view.fields.layers.push(Layer {
+                components: Vec::new(),
+            });
+        }
+
+        view.fields.layers[layer].components.push(instance);
+
+        instance
     }
 
     //see __TargetSreen
